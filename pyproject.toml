@@ -48,7 +48,7 @@ python_version = "3.11"
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["meilisearch.*"]
+module = ["meilisearch.*", "mcp.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

@@ -43,6 +43,7 @@ class SqliteExtractionCache:
 
     def __init__(self, path: str | Path) -> None:
         self._path = str(path)
+        Path(self._path).parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS extractions ("

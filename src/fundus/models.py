@@ -133,6 +133,7 @@ class Chunk(BaseModel):
     heading_path: list[str] = Field(default_factory=list)  # carried structural context
     page: int | None = None
     token_count: int = 0
+    meta: dict[str, Any] = Field(default_factory=dict)  # chunk-type extras (msg_ids, sheet, ts)
 
 
 class IndexDocument(BaseModel):

@@ -1,0 +1,45 @@
+# Fundus configuration (TOML). Copy to ~/.config/fundus.toml and edit.
+# Every path below is an EXAMPLE — point them at your own corpus locations.
+
+[meilisearch]
+url   = "http://127.0.0.1:7700"
+index = "corpus"
+# api_key = "..."          # or set FUNDUS_MEILI_KEY in the environment
+
+[embedder]
+# A bare-metal, OpenAI-compatible embeddings endpoint (e.g. MLX / llama.cpp / Ollama).
+url   = "http://127.0.0.1:8081/v1/embeddings"
+model = "qwen3-embedding"
+
+[extractor]
+default = "docling-serve"        # swap freely; the cache is keyed per engine
+
+[extractor.engines.docling-serve]
+url = "http://127.0.0.1:5001"
+
+[extractor.engines.tika]
+url = "http://127.0.0.1:9998"
+
+# --- Sources (pluggable). Add as many as you like, of any supported type. ---
+
+[[sources]]
+name  = "mail"
+type  = "notmuch"
+db    = "/path/to/maildir"       # a notmuch-indexed maildir
+query = "*"
+
+[[sources]]
+name = "chat"
+type = "wacli"
+db   = "/path/to/whatsapp.db"    # a wacli SQLite database (opened read-only)
+
+[sources.window]
+target_tokens  = 512
+max_tokens     = 1024
+overlap        = 2
+soft_gap_hours = 24
+
+[[sources]]
+name  = "documents"
+type  = "files"
+roots = ["/path/to/documents", "/path/to/more/documents"]

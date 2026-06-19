@@ -1,0 +1,34 @@
+# Fundus service stack.
+#
+# The embedding MODEL is intentionally absent here — it must run bare-metal
+# (it needs GPU access, which containers on macOS cannot reach) and is called
+# over HTTP by Meilisearch. Run it separately and point [embedder].url at it.
+#
+# Pin every image to a current release before deploying.
+name: fundus
+
+services:
+  meilisearch:
+    image: getmeili/meilisearch:latest # pin to a current release
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${FUNDUS_MEILI_KEY:?set FUNDUS_MEILI_KEY in your .env}
+      MEILI_ENV: production
+    ports:
+      - "127.0.0.1:7700:7700"
+    volumes:
+      - ./data/meili:/meili_data
+
+  # Primary extraction engine (best PDF layout/table fidelity).
+  docling-serve:
+    image: ghcr.io/docling-project/docling-serve:latest # pin to a current release
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5001:5001"
+
+  # Fallback extraction engine: broadest format coverage; "-full" bundles OCR.
+  tika:
+    image: apache/tika:latest-full # pin to a current release
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9998:9998"

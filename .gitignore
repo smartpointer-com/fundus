@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Local config & secrets — never commit a real config or env file
+.env
+fundus.toml
+*.local.toml
+*.local.md
+
+
+# Runtime data, caches, and service volumes
+data/
+cache/
+*.db
+*.sqlite
+
+# OS
+.DS_Store

@@ -29,6 +29,7 @@ class EmbedderConfig(BaseModel):
 
 class EngineConfig(BaseModel):
     url: str
+    version: str = "unknown"  # pin to invalidate the extraction cache on engine upgrade
 
 
 class ExtractorConfig(BaseModel):

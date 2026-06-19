@@ -1,4 +1,32 @@
-"""Builds the Meilisearch REST-embedder configuration.
+"""Build the Meilisearch REST-embedder configuration.
 
-Scaffolding stub. See docs/implementation-plan.md for the phase that implements this.
+Points Meilisearch at a bare-metal, OpenAI-compatible ``/embeddings`` endpoint so
+it embeds documents at index time and queries at search time. The orchestrator
+never calls the model itself.
 """
+
+from __future__ import annotations
+
+from typing import Any
+
+from fundus.config import EmbedderConfig
+
+DEFAULT_EMBEDDER = "default"
+
+
+def rest_embedder(
+    cfg: EmbedderConfig,
+    *,
+    name: str = DEFAULT_EMBEDDER,
+    document_template: str = "{{doc.title}} {{doc.body}}",
+) -> dict[str, Any]:
+    embedder: dict[str, Any] = {
+        "source": "rest",
+        "url": cfg.url,
+        "request": {"model": cfg.model, "input": ["{{text}}"]},
+        "response": {"data": [{"embedding": "{{embedding}}"}]},
+        "documentTemplate": document_template,
+    }
+    if cfg.dimensions:
+        embedder["dimensions"] = cfg.dimensions
+    return {name: embedder}

@@ -55,9 +55,22 @@ file so it knows your environment without leaking it into the repository. See
 
 ## Status
 
-Early scaffold: interfaces, configuration, and documentation are in place; the
-connectors, extraction adapters, chunkers, and sink are being implemented per the
-[implementation plan](docs/implementation-plan.md).
+The pipeline is implemented end-to-end and unit-tested — extraction adapters and
+cache, chunkers, the Meilisearch sink, the source connectors, the indexing
+pipeline, the CLI, and MCP serve — with `ruff` and `mypy --strict` clean. What
+remains is integration against live services and choosing the default extraction
+engine via the bake-off. See the
+[implementation plan](docs/implementation-plan.md) for status and the
+[decision record](docs/decisions.md) for rationale.
+
+## Development
+
+```bash
+make install   # create the environment and install dev dependencies
+make lint      # ruff + mypy
+make test      # pytest
+make up        # start Meilisearch + extraction engines (Docker)
+```
 
 ## License
 

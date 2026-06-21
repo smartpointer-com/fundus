@@ -26,3 +26,13 @@ def test_rest_embedder_fields():
     assert default["request"]["model"] == "qwen"
     assert default["dimensions"] == 1024
     assert "{{doc.title}}" in default["documentTemplate"]
+
+
+def test_rest_embedder_includes_api_key_when_set():
+    emb = rest_embedder(EmbedderConfig(url="http://x", model="m", api_key="secret"))
+    assert emb["default"]["apiKey"] == "secret"
+
+
+def test_rest_embedder_omits_api_key_when_unset():
+    emb = rest_embedder(EmbedderConfig(url="http://x", model="m"))
+    assert "apiKey" not in emb["default"]

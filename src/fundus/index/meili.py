@@ -8,6 +8,7 @@ from typing import Any
 
 import meilisearch
 
+from fundus.embed.client import EmbeddingClient
 from fundus.embed.config import DEFAULT_EMBEDDER
 from fundus.index.base import IndexSettings
 from fundus.index.query import group_by_parent, hybrid_search_params
@@ -19,6 +20,9 @@ class MeiliSink:
     """Writes index documents to Meilisearch and runs hybrid queries.
 
     A ``client`` may be injected (for tests); otherwise one is built from ``url``.
+    When a ``query_embedder`` is provided, queries are embedded by Fundus (so a
+    model-specific instruct prefix can be applied) and passed to Meilisearch as the
+    query vector, leaving the keyword query clean.
     """
 
     def __init__(
@@ -30,12 +34,14 @@ class MeiliSink:
         embedder_name: str = DEFAULT_EMBEDDER,
         client: Any | None = None,
         batch_size: int = 1000,
+        query_embedder: EmbeddingClient | None = None,
     ) -> None:
         self._client = client if client is not None else meilisearch.Client(url, api_key)
         self._uid = index
         self._embedders = embedders
         self._embedder_name = embedder_name
         self._batch_size = batch_size
+        self._query_embedder = query_embedder
 
     @property
     def _index(self) -> Any:
@@ -84,5 +90,7 @@ class MeiliSink:
             limit=limit,
             embedder=self._embedder_name,
         )
+        if semantic_ratio > 0 and self._query_embedder is not None:
+            params["vector"] = self._query_embedder.embed_query(query)
         res = self._index.search(query, params)
         return group_by_parent(res.get("hits", []))

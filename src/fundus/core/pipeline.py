@@ -21,6 +21,7 @@ from fundus.config import (
 )
 from fundus.core.reconcile import live_parent_ids
 from fundus.core.state import JsonStateStore, StateStore
+from fundus.embed.client import EmbeddingClient
 from fundus.embed.config import rest_embedder
 from fundus.extract.base import ExtractOptions, ExtractRequest, Extractor
 from fundus.extract.cache import ExtractionCache, SqliteExtractionCache, extract_with_cache
@@ -146,11 +147,21 @@ class Pipeline:
 
 
 def build_sink(config: FundusConfig) -> MeiliSink:
+    embedder_cfg = config.embedder
+    query_embedder = None
+    if embedder_cfg.query_prompt:  # opt-in: only self-embed queries when a prefix is configured
+        query_embedder = EmbeddingClient(
+            url=embedder_cfg.query_url or embedder_cfg.url,
+            model=embedder_cfg.model,
+            api_key=embedder_cfg.api_key,
+            query_prompt=embedder_cfg.query_prompt,
+        )
     return MeiliSink(
         url=config.meilisearch.url,
         index=config.meilisearch.index,
         api_key=config.meilisearch.api_key,
-        embedders=rest_embedder(config.embedder),
+        embedders=rest_embedder(embedder_cfg),
+        query_embedder=query_embedder,
     )
 
 

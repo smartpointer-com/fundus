@@ -14,6 +14,10 @@ services:
     environment:
       MEILI_MASTER_KEY: ${FUNDUS_MEILI_KEY:?set FUNDUS_MEILI_KEY in your .env}
       MEILI_ENV: production
+      # Meili blocks outbound embedder/webhook requests to non-global IPs by default (SSRF guard).
+      # When Meili runs in Docker and must reach a host-side embedder, set this to the Docker
+      # host-gateway subnet (e.g. 192.168.5.0/24 for colima) or "any". Empty = guard fully on.
+      MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: ${MEILI_ALLOWED_IP_NETWORKS:-}
     ports:
       - "127.0.0.1:7700:7700"
     volumes:

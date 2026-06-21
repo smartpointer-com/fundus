@@ -8,6 +8,7 @@ class FakeIndex:
         self.settings = None
         self.added: list[list[dict]] = []
         self.deleted: list[str] = []
+        self.last_params: dict | None = None
         self._resp = search_response or {}
 
     def update_settings(self, payload):
@@ -23,6 +24,7 @@ class FakeIndex:
         return {"taskUid": 1}
 
     def search(self, query, params=None):
+        self.last_params = params
         return self._resp
 
 
@@ -83,3 +85,30 @@ def test_search_groups_by_parent():
     groups = sink.search("q")
     assert [g["parent_id"] for g in groups] == ["A", "B"]
     assert len(groups[0]["chunks"]) == 2
+
+
+class FakeQueryEmbedder:
+    def __init__(self):
+        self.calls: list[str] = []
+
+    def embed_query(self, query):
+        self.calls.append(query)
+        return [0.5, 0.5]
+
+
+def test_search_self_embeds_query_when_embedder_present():
+    idx = FakeIndex(search_response={"hits": [{"id": "1", "parent_id": "A"}]})
+    qe = FakeQueryEmbedder()
+    sink = MeiliSink(index="c", client=FakeClient(idx), query_embedder=qe)
+    sink.search("hello", semantic_ratio=0.5)
+    assert qe.calls == ["hello"]
+    assert idx.last_params["vector"] == [0.5, 0.5]
+
+
+def test_search_skips_query_embed_when_keyword_only():
+    idx = FakeIndex(search_response={"hits": []})
+    qe = FakeQueryEmbedder()
+    sink = MeiliSink(index="c", client=FakeClient(idx), query_embedder=qe)
+    sink.search("hello", semantic_ratio=0.0)
+    assert qe.calls == []
+    assert "vector" not in idx.last_params

@@ -27,6 +27,13 @@ def test_load_config_env_secret(tmp_path, monkeypatch):
     assert load_config(f).meilisearch.api_key == "secret123"
 
 
+def test_load_config_embed_env_secret(tmp_path, monkeypatch):
+    monkeypatch.setenv("FUNDUS_EMBED_KEY", "embsecret")
+    f = tmp_path / "fundus.toml"
+    f.write_text("")
+    assert load_config(f).embedder.api_key == "embsecret"
+
+
 def test_load_config_missing_file_defaults(tmp_path):
     assert load_config(tmp_path / "nope.toml").meilisearch.index == "corpus"
 

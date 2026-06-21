@@ -29,4 +29,7 @@ def rest_embedder(
     }
     if cfg.dimensions:
         embedder["dimensions"] = cfg.dimensions
+    if cfg.api_key:
+        # Meilisearch's REST embedder sends this as `Authorization: Bearer <key>`.
+        embedder["apiKey"] = cfg.api_key
     return {name: embedder}

@@ -28,6 +28,14 @@ class EmbedderConfig(BaseModel):
     url: str = "http://127.0.0.1:8081/v1/embeddings"
     model: str = "qwen3-embedding"
     dimensions: int | None = None
+    api_key: str | None = None  # falls back to env FUNDUS_EMBED_KEY; sent as a bearer token
+    # URL Fundus itself uses to embed QUERIES (host-side); falls back to `url`. Needed when Meili
+    # reaches the embedder at a different address than the host process does (e.g. Meili-in-Docker
+    # uses host.docker.internal while the host uses 127.0.0.1).
+    query_url: str | None = None
+    # Instruct prefix prepended to QUERIES only (not documents). Empty = symmetric (Meili embeds
+    # the query). Set this for models like Qwen3-Embedding that want an asymmetric query prompt.
+    query_prompt: str = ""
 
 
 class EngineConfig(BaseModel):
@@ -90,4 +98,6 @@ def load_config(path: str | Path | None = None) -> FundusConfig:
     cfg = FundusConfig.model_validate(data)
     if cfg.meilisearch.api_key is None:
         cfg.meilisearch.api_key = os.environ.get("FUNDUS_MEILI_KEY")
+    if cfg.embedder.api_key is None:
+        cfg.embedder.api_key = os.environ.get("FUNDUS_EMBED_KEY")
     return cfg

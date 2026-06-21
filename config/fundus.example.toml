@@ -10,6 +10,11 @@ index = "corpus"
 # A bare-metal, OpenAI-compatible embeddings endpoint (e.g. MLX / llama.cpp / Ollama).
 url   = "http://127.0.0.1:8081/v1/embeddings"
 model = "qwen3-embedding"
+# api_key = "..."          # or set FUNDUS_EMBED_KEY if the endpoint requires a bearer token
+# query_url   = "..."      # host-side embedder URL for Fundus's own query embedding, if it differs
+#                          # from `url` (e.g. Meili-in-Docker uses host.docker.internal, host uses 127.0.0.1)
+# query_prompt = "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery: "
+#                          # instruct prefix for QUERIES only (models like Qwen3-Embedding); empty = symmetric
 
 [extractor]
 default = "docling-serve"        # swap freely; the cache is keyed per engine

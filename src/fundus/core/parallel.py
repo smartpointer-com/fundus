@@ -1,8 +1,8 @@
 """Bounded parallel map over a stream of items, using a thread pool.
 
-Indexing is dominated by extraction (HTTP calls to docling/tika) and, downstream,
-embedding (Meili -> the model server). Those are I/O-bound from the orchestrator's
-side, so a thread pool that issues many requests concurrently keeps the services
+Indexing is dominated by extraction (HTTP calls to docling/tika) and, with fan-out
+indexing, embedding (Fundus -> the model server). Those are I/O-bound from the
+orchestrator's side, so a thread pool that issues many requests concurrently keeps the services
 (and thus the host cores) busy. Bounded in-flight work so a huge source never
 buffers in memory; results are yielded as they complete (order not preserved).
 """

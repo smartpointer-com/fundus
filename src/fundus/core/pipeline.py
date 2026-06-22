@@ -10,7 +10,6 @@ reconcile deletions.
 from __future__ import annotations
 
 import time
-from pathlib import Path
 
 import httpx
 import structlog
@@ -42,21 +41,12 @@ from fundus.models import (
     IndexDocument,
     SourceItem,
     TextPayload,
+    payload_bytes,
 )
 from fundus.sources.base import Source
 from fundus.sources.registry import build_source
 
 log = structlog.get_logger("fundus.pipeline")
-
-
-def _blob_bytes(payload: object) -> bytes:
-    data = getattr(payload, "data", None)
-    if isinstance(data, bytes):
-        return data
-    path = getattr(payload, "path", None)
-    if isinstance(path, str):
-        return Path(path).read_bytes()
-    return b""
 
 
 def to_extraction(
@@ -75,7 +65,7 @@ def to_extraction(
     if is_tabular(mime):
         return ExtractionResult.from_text("")
 
-    data = _blob_bytes(item.payload)
+    data = payload_bytes(item.payload)
     if mime == "text/markdown":
         text = data.decode("utf-8", errors="replace")
         return ExtractionResult(

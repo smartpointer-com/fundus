@@ -57,7 +57,6 @@ class FilesSource:
                 mime_type=guess_mime(data, path.name),
                 ts=datetime.fromtimestamp(mtime, tz=UTC),
                 payload=BlobPayload(path=str(path), data=data, sha256=content_sha256(data)),
-                cursor_token=str(mtime),
             )
 
     def live_ids(self) -> Iterator[str]:

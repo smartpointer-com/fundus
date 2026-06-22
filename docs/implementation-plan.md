@@ -5,10 +5,12 @@ with a unit-test suite and `ruff` + `mypy --strict` clean.
 
 ## Status
 
-Phases 0–6 are **implemented and tested**. Phase 7 (packaging/ops/docs) is in
-progress. Integration against live services (Meilisearch, docling-serve/Tika, the
-embedding endpoint) is the remaining real-world validation; the bake-off chooses
-the default extraction engine on a real corpus sample.
+All phases are **implemented and tested**, and the pipeline has been validated
+against live services on a real corpus. The bake-off favoured an escalating router
+(tika-first, docling for scans) as the default. Capabilities added beyond the
+original phases: fan-out embedding with a reusable vector cache, the escalating
+extraction router with a sequential-retry fallback for big scans, and indexing of
+email/WhatsApp document attachments.
 
 | Phase | Status |
 |---|---|
@@ -19,7 +21,7 @@ the default extraction engine on a real corpus sample.
 | 4 — Sources | ✅ |
 | 5 — Pipeline, state, reconcile, CLI, locking | ✅ |
 | 6 — Query & MCP serve | ✅ |
-| 7 — Packaging & ops | 🚧 |
+| 7 — Packaging & ops | ✅ |
 
 ## Notable design decisions made during implementation
 

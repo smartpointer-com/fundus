@@ -10,22 +10,40 @@ index = "corpus"
 # A bare-metal, OpenAI-compatible embeddings endpoint (e.g. MLX / llama.cpp / Ollama).
 url   = "http://127.0.0.1:8081/v1/embeddings"
 model = "qwen3-embedding"
+# dimensions = 1024        # the model's vector size; REQUIRED when fanout is on (userProvided embedder)
 # api_key = "..."          # or set FUNDUS_EMBED_KEY if the endpoint requires a bearer token
 # query_url   = "..."      # host-side embedder URL for Fundus's own query embedding, if it differs
 #                          # from `url` (e.g. Meili-in-Docker uses host.docker.internal, host uses 127.0.0.1)
 # query_prompt = "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery: "
 #                          # instruct prefix for QUERIES only (models like Qwen3-Embedding); empty = symmetric
+# fanout = true            # Fundus computes document vectors itself (concurrently) and stores them via a
+#                          # userProvided embedder, bypassing Meili's one-request-at-a-time REST path — a big
+#                          # win on a heavy model. Needs `dimensions` and a `query_prompt`. A SQLite vector
+#                          # cache then makes re-indexes cheap (seed it once with `fundus embed-backfill`).
 
 [extractor]
-default = "docling-serve"        # swap freely; the cache is keyed per engine
+default = "docling-serve"        # or "escalate" (below); the cache is keyed per engine
 
 [extractor.engines.docling-serve]
 url = "http://127.0.0.1:5001"
+# max_concurrency = 2      # cap concurrent requests to docling (it drops queued connections when flooded);
+#                          # a request that hits a resource/time limit is then retried exclusively
+# timeout = 960            # client read timeout (s); keep above docling's max_sync_wait for large-scan OCR
 
 [extractor.engines.tika]
 url = "http://127.0.0.1:9998"
 
+# Escalating router: run `fast` first and fall back to `quality` only when the result is too sparse
+# (a scanned PDF needing OCR) — ~tika speed with docling fidelity where it matters. Set the extractor
+# `default = "escalate"` above to use it.
+# [extractor.router]
+# fast = "tika"
+# quality = "docling-serve"
+# min_chars = 100
+
 # --- Sources (pluggable). Add as many as you like, of any supported type. ---
+# notmuch and wacli also index document attachments / shared files by default
+# (set `attachments = false` / `media = false` on the source to disable).
 
 [[sources]]
 name  = "mail"

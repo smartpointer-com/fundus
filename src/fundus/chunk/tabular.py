@@ -9,13 +9,12 @@ from __future__ import annotations
 
 import csv as csvmod
 import io
-from pathlib import Path
 from typing import Any
 
 from fundus.chunk.base import ChunkParams
 from fundus.chunk.tokens import count_tokens
 from fundus.core.ids import parent_id
-from fundus.models import Chunk, ExtractionResult, SourceItem
+from fundus.models import Chunk, ExtractionResult, SourceItem, payload_bytes
 
 
 def _cell(value: object) -> str:
@@ -60,17 +59,6 @@ def parse_sheets(data: bytes, mime: str | None) -> list[tuple[str, list[list[str
         raw = workbook.get_sheet_by_name(name).to_python()
         sheets.append((name, [[_cell(c) for c in row] for row in raw]))
     return sheets
-
-
-def _payload_bytes(item: SourceItem) -> bytes:
-    payload = item.payload
-    data = getattr(payload, "data", None)
-    if isinstance(data, bytes):
-        return data
-    path = getattr(payload, "path", None)
-    if isinstance(path, str):
-        return Path(path).read_bytes()
-    return b""
 
 
 class TabularChunker:
@@ -125,7 +113,7 @@ class TabularChunker:
     def chunk(self, doc: ExtractionResult, item: SourceItem) -> list[Chunk]:
         chunks: list[Chunk] = []
         seq = 0
-        for name, rows in parse_sheets(_payload_bytes(item), item.mime_type):
+        for name, rows in parse_sheets(payload_bytes(item.payload), item.mime_type):
             sheet_chunks = self.chunk_sheet(name, rows, item, start_seq=seq)
             chunks.extend(sheet_chunks)
             seq += len(sheet_chunks)

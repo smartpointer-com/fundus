@@ -38,11 +38,16 @@ Lets multiple engines' outputs for the same document coexist (real A/B), and
 makes re-chunking / re-embedding free of re-extraction — important because OCR is
 expensive.
 
-## 6. Embeddings owned by Meilisearch's REST embedder
+## 6. Embeddings: fan-out from the orchestrator, with a vector cache
 
-Meilisearch embeds documents at index time and queries at search time by calling
-a bare-metal, OpenAI-compatible endpoint. The orchestrator pushes JSON and never
-imports an ML framework, keeping it light.
+The default is fan-out indexing: Fundus computes document vectors itself, calling a bare-metal,
+OpenAI-compatible endpoint concurrently from the indexing worker pool, then hands Meilisearch the
+finished vectors (a `userProvided` embedder). This sidesteps Meilisearch's one-request-at-a-time
+REST-embedder path, which is the bottleneck on a heavy local model. A SQLite vector cache (keyed by
+model + embed-input text) lets re-indexes reuse embeddings rather than recompute them. The simpler
+`rest_embedder` (Meilisearch embeds documents itself) stays available for light models. Either way
+the orchestrator only pushes JSON and never imports an ML framework. Queries are always embedded by
+Fundus so a model-specific instruct prefix can be applied without polluting the keyword query.
 
 ## 7. Docker for services, bare-metal for the model
 

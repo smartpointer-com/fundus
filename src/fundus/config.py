@@ -33,8 +33,10 @@ class EmbedderConfig(BaseModel):
     # reaches the embedder at a different address than the host process does (e.g. Meili-in-Docker
     # uses host.docker.internal while the host uses 127.0.0.1).
     query_url: str | None = None
-    # Instruct prefix prepended to QUERIES only (not documents). Empty = symmetric (Meili embeds
-    # the query). Set this for models like Qwen3-Embedding that want an asymmetric query prompt.
+    # Instruct prefix prepended to QUERIES only (not documents). Set it for asymmetric models like
+    # Qwen3-Embedding; leave empty for symmetric ones. When set, Fundus embeds the query itself and
+    # passes the vector to Meili (so the prefix never pollutes the keyword query); fan-out indexing
+    # relies on this, since a userProvided embedder cannot embed the query server-side.
     query_prompt: str = ""
     # When true, Fundus computes document vectors itself (concurrently, via the indexing worker
     # pool) and pushes them to Meili through a userProvided embedder, instead of Meili embedding
@@ -112,14 +114,17 @@ def default_lock_path() -> Path:
     return _state_home() / "fundus.lock"
 
 
-def default_cache_path() -> Path:
+def _cache_home() -> Path:
     base = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
-    return Path(base) / "fundus" / "extractions.db"
+    return Path(base) / "fundus"
+
+
+def default_cache_path() -> Path:
+    return _cache_home() / "extractions.db"
 
 
 def default_embed_cache_path() -> Path:
-    base = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
-    return Path(base) / "fundus" / "embeddings.db"
+    return _cache_home() / "embeddings.db"
 
 
 def load_config(path: str | Path | None = None) -> FundusConfig:

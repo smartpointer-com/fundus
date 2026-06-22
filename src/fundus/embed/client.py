@@ -1,8 +1,9 @@
 """HTTP client for an OpenAI-compatible embeddings endpoint.
 
-Used at QUERY time so Fundus can apply a model-specific instruct prefix to the
-query (documents are embedded by Meilisearch at index time). The resulting query
-vector is handed to Meilisearch directly, keeping the keyword query clean.
+Always used to embed the QUERY (applying a model-specific instruct prefix) so the
+vector can be handed to Meilisearch directly, keeping the keyword query clean. The
+same client also embeds DOCUMENTS when fan-out indexing is enabled (see
+core.pipeline); otherwise Meilisearch embeds documents itself via the REST embedder.
 """
 
 from __future__ import annotations

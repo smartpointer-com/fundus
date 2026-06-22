@@ -1,8 +1,8 @@
-"""Build the Meilisearch REST-embedder configuration.
+"""Build Meilisearch embedder configurations for a bare-metal, OpenAI-compatible endpoint.
 
-Points Meilisearch at a bare-metal, OpenAI-compatible ``/embeddings`` endpoint so
-it embeds documents at index time and queries at search time. The orchestrator
-never calls the model itself.
+Two shapes: ``rest_embedder`` lets Meilisearch embed documents itself at index time (the
+orchestrator only embeds queries), while ``user_provided_embedder`` is used for fan-out indexing,
+where Fundus computes the document vectors and hands Meilisearch only the finished vectors.
 """
 
 from __future__ import annotations

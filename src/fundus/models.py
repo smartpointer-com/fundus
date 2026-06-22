@@ -9,6 +9,7 @@ chunker turns that into ``Chunk``s; and the sink stores ``IndexDocument``s.
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -41,6 +42,17 @@ class BlobPayload(BaseModel):
 Payload = TextPayload | BlobPayload
 
 
+def payload_bytes(payload: object) -> bytes:
+    """Raw bytes for a payload: inline ``data`` if present, else read its ``path`` (else empty)."""
+    data = getattr(payload, "data", None)
+    if isinstance(data, bytes):
+        return data
+    path = getattr(payload, "path", None)
+    if isinstance(path, str):
+        return Path(path).read_bytes()
+    return b""
+
+
 class SourceItem(BaseModel):
     """One logical artifact emitted by a source (an email, chat window, or file)."""
 
@@ -57,7 +69,6 @@ class SourceItem(BaseModel):
     actors: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     payload: Payload
-    cursor_token: str | None = None
     extra: dict[str, Any] = Field(default_factory=dict)
 
 

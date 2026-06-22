@@ -10,8 +10,8 @@ It is built around two plugin families, both swappable by configuration:
 - **Sources** — where data comes from (a notmuch mail store, a chat database, a
   file tree). Nothing is hard-coded to a particular filesystem layout.
 - **Extraction engines** — how document bytes become text. An engine-agnostic
-  interface lets you swap or A/B-test engines (docling-serve, Apache Tika, MinerU)
-  without touching the rest of the pipeline.
+  interface lets you swap, A/B-test, or *escalate* between engines (docling-serve,
+  Apache Tika) without touching the rest of the pipeline.
 
 ## How it fits together
 
@@ -34,7 +34,7 @@ See [docs/architecture.md](docs/architecture.md) for the full design,
 choices, and [docs/deployment.md](docs/deployment.md) for where to keep
 machine-specific setup notes.
 
-## Quick start (once implemented)
+## Quick start
 
 ```bash
 make install                       # set up the Python environment
@@ -55,13 +55,12 @@ file so it knows your environment without leaking it into the repository. See
 
 ## Status
 
-The pipeline is implemented end-to-end and unit-tested — extraction adapters and
-cache, chunkers, the Meilisearch sink, the source connectors, the indexing
-pipeline, the CLI, and MCP serve — with `ruff` and `mypy --strict` clean. What
-remains is integration against live services and choosing the default extraction
-engine via the bake-off. See the
-[implementation plan](docs/implementation-plan.md) for status and the
-[decision record](docs/decisions.md) for rationale.
+The pipeline is implemented end-to-end, unit-tested (`ruff` + `mypy --strict`
+clean), and validated against live services on a real corpus. Beyond the core it
+adds an escalating extraction router (tika-first, docling for scans), fan-out
+embedding with a reusable vector cache, and indexing of email/WhatsApp document
+attachments. See the [implementation plan](docs/implementation-plan.md) for the
+build phases and the [decision record](docs/decisions.md) for rationale.
 
 ## Development
 

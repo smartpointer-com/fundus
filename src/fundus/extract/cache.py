@@ -51,7 +51,9 @@ class SqliteExtractionCache:
             )
 
     def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(self._path)
+        # A new connection per call (each worker thread gets its own); the busy timeout lets
+        # concurrent writers from the worker pool wait instead of erroring "database is locked".
+        return sqlite3.connect(self._path, timeout=30.0)
 
     def get(self, key: CacheKey) -> ExtractionResult | None:
         with self._connect() as conn:

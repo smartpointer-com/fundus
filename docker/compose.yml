@@ -27,6 +27,13 @@ services:
   docling-serve:
     image: ghcr.io/docling-project/docling-serve:latest # pin to a current release
     restart: unless-stopped
+    environment:
+      # In-process conversion workers (docling default 2). Raise toward your CPU count for more
+      # parallel conversions; each also spends OMP_NUM_THREADS, and more workers use more memory.
+      DOCLING_SERVE_ENG_LOC_NUM_WORKERS: ${DOCLING_WORKERS:-2}
+      # Synchronous /v1/convert/file returns 504 after this many seconds. The 120s default times
+      # out OCR of large scanned PDFs; raise it (and the client timeout) to accommodate them.
+      DOCLING_SERVE_MAX_SYNC_WAIT: ${DOCLING_SYNC_WAIT:-120}
     ports:
       - "127.0.0.1:5001:5001"
 

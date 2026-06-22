@@ -1,7 +1,19 @@
+import pytest
+
 from fundus.config import EmbedderConfig
-from fundus.embed.config import rest_embedder
+from fundus.embed.config import rest_embedder, user_provided_embedder
 from fundus.index.base import IndexSettings
 from fundus.index.settings import build_index_settings
+
+
+def test_user_provided_embedder():
+    emb = user_provided_embedder(EmbedderConfig(url="http://x", model="m", dimensions=2560))
+    assert emb["default"] == {"source": "userProvided", "dimensions": 2560}
+
+
+def test_user_provided_embedder_requires_dimensions():
+    with pytest.raises(ValueError, match="dimensions"):
+        user_provided_embedder(EmbedderConfig(url="http://x", model="m"))
 
 
 def test_build_index_settings():
@@ -26,6 +38,9 @@ def test_rest_embedder_fields():
     assert default["request"]["model"] == "qwen"
     assert default["dimensions"] == 1024
     assert "{{doc.title}}" in default["documentTemplate"]
+    # batch markers: many docs per request, parallel array of embeddings back
+    assert default["request"]["input"] == ["{{text}}", "{{..}}"]
+    assert default["response"]["data"] == [{"embedding": "{{embedding}}"}, "{{..}}"]
 
 
 def test_rest_embedder_includes_api_key_when_set():

@@ -23,8 +23,11 @@ def rest_embedder(
     embedder: dict[str, Any] = {
         "source": "rest",
         "url": cfg.url,
-        "request": {"model": cfg.model, "input": ["{{text}}"]},
-        "response": {"data": [{"embedding": "{{embedding}}"}]},
+        # The "{{..}}" rest markers let Meilisearch batch many documents into one request
+        # (input array) and read back the parallel array of embeddings. Without them Meili
+        # sends one HTTP request per document — ~27x slower against a high-latency local model.
+        "request": {"model": cfg.model, "input": ["{{text}}", "{{..}}"]},
+        "response": {"data": [{"embedding": "{{embedding}}"}, "{{..}}"]},
         "documentTemplate": document_template,
     }
     if cfg.dimensions:
@@ -33,3 +36,14 @@ def rest_embedder(
         # Meilisearch's REST embedder sends this as `Authorization: Bearer <key>`.
         embedder["apiKey"] = cfg.api_key
     return {name: embedder}
+
+
+def user_provided_embedder(cfg: EmbedderConfig, *, name: str = DEFAULT_EMBEDDER) -> dict[str, Any]:
+    """A ``userProvided`` embedder: Meili stores vectors Fundus supplies and embeds nothing itself.
+
+    Used with fan-out indexing, where Fundus computes document vectors concurrently. Meilisearch
+    requires the dimension count up front for this source.
+    """
+    if not cfg.dimensions:
+        raise ValueError("fanout embedding requires embedder.dimensions to be set")
+    return {name: {"source": "userProvided", "dimensions": cfg.dimensions}}

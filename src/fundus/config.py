@@ -36,16 +36,37 @@ class EmbedderConfig(BaseModel):
     # Instruct prefix prepended to QUERIES only (not documents). Empty = symmetric (Meili embeds
     # the query). Set this for models like Qwen3-Embedding that want an asymmetric query prompt.
     query_prompt: str = ""
+    # When true, Fundus computes document vectors itself (concurrently, via the indexing worker
+    # pool) and pushes them to Meili through a userProvided embedder, instead of Meili embedding
+    # one request at a time over REST. Big win when the model is heavy and Meili's sequential
+    # embedding is the bottleneck. Requires `dimensions` to be set.
+    fanout: bool = False
 
 
 class EngineConfig(BaseModel):
     url: str
     version: str = "unknown"  # pin to invalidate the extraction cache on engine upgrade
+    # Cap on concurrent requests Fundus sends to this engine (None = unlimited). docling-serve
+    # drops queued connections when flooded, so cap it at/below its own worker count, decoupled
+    # from the (higher) indexing worker count used to drive embedding concurrency.
+    max_concurrency: int | None = None
+    # HTTP read timeout (seconds). Keep it above the engine's own job timeout (e.g. docling-serve's
+    # max_sync_wait) so slow OCR on large scans finishes instead of the client giving up first.
+    timeout: float = 600.0
+
+
+class RouterConfig(BaseModel):
+    # Used by the "escalate" engine: try `fast` first, fall back to `quality` when the fast result
+    # has fewer than `min_chars` characters (typically a scanned PDF that needs OCR + layout).
+    fast: str = "tika"
+    quality: str = "docling-serve"
+    min_chars: int = 100
 
 
 class ExtractorConfig(BaseModel):
     default: str = "docling-serve"
     engines: dict[str, EngineConfig] = Field(default_factory=dict)
+    router: RouterConfig = Field(default_factory=RouterConfig)
 
 
 class SourceConfig(BaseModel):
@@ -63,6 +84,10 @@ class FundusConfig(BaseModel):
     extractor: ExtractorConfig = Field(default_factory=ExtractorConfig)
     # Corpus locales: used for localizedAttributes and as default OCR languages.
     locales: list[str] = Field(default_factory=lambda: ["eng"])
+    # Indexing concurrency: a thread pool issues extraction requests in parallel so the
+    # services (docling/tika, then Meili -> embedder) keep the host cores busy. Tune to the
+    # extraction service's capacity and container memory.
+    workers: int = Field(default_factory=lambda: min(8, os.cpu_count() or 4))
     sources: list[SourceConfig] = Field(default_factory=list)
 
 
@@ -90,6 +115,11 @@ def default_lock_path() -> Path:
 def default_cache_path() -> Path:
     base = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
     return Path(base) / "fundus" / "extractions.db"
+
+
+def default_embed_cache_path() -> Path:
+    base = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
+    return Path(base) / "fundus" / "embeddings.db"
 
 
 def load_config(path: str | Path | None = None) -> FundusConfig:

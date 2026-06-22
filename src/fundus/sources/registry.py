@@ -19,6 +19,13 @@ _WACLI_KEYS = {
     "sender_col",
     "text_cols",
     "where",
+    "media",
+    "media_type_col",
+    "filename_col",
+    "mime_col",
+    "path_col",
+    "document_media_type",
+    "media_dir",
 }
 
 
@@ -27,7 +34,12 @@ def build_source(cfg: SourceConfig) -> Source:
     if cfg.type == "files":
         return FilesSource(cfg.name, roots=opts["roots"], max_bytes=opts.get("max_bytes"))
     if cfg.type == "notmuch":
-        return NotmuchSource(cfg.name, db=opts.get("db"), query=opts.get("query", "*"))
+        return NotmuchSource(
+            cfg.name,
+            db=opts.get("db"),
+            query=opts.get("query", "*"),
+            attachments=opts.get("attachments", True),
+        )
     if cfg.type == "wacli":
         kwargs = {k: v for k, v in opts.items() if k in _WACLI_KEYS}
         return WacliSource(cfg.name, db=opts["db"], **kwargs)

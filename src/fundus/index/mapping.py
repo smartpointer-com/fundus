@@ -22,6 +22,7 @@ def to_index_document(item: SourceItem, chunk: Chunk) -> IndexDocument:
         source=item.source,
         item_kind=item.item_kind,
         parent_id=chunk.parent_id,
+        native_id=item.native_id,
         title=item.title,
         body=body,
         ts=ts,

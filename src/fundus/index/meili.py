@@ -55,7 +55,12 @@ class MeiliSink:
     def upsert(self, docs: Sequence[IndexDocument]) -> None:
         batch: list[dict[str, Any]] = []
         for doc in docs:
-            batch.append(doc.model_dump())
+            record = doc.model_dump()
+            vector = record.pop("vector", None)
+            if vector is not None:
+                # Fan-out indexing: hand Meili the pre-computed vector via userProvided embedder.
+                record["_vectors"] = {self._embedder_name: vector}
+            batch.append(record)
             if len(batch) >= self._batch_size:
                 self._index.add_documents(batch, primary_key="id")
                 batch = []
@@ -68,6 +73,12 @@ class MeiliSink:
         )
         dist = (res.get("facetDistribution") or {}).get("parent_id") or {}
         return set(dist.keys())
+
+    def source_counts(self) -> dict[str, int]:
+        """Indexed chunk count per source (facet distribution over ``source``)."""
+        res = self._index.search("", {"facets": ["source"], "limit": 0})
+        dist = (res.get("facetDistribution") or {}).get("source") or {}
+        return {str(k): int(v) for k, v in dist.items()}
 
     def delete_missing(self, source: str, live_parent_ids: set[str]) -> int:
         dead = self._indexed_parent_ids(source) - live_parent_ids

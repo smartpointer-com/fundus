@@ -10,6 +10,7 @@ from __future__ import annotations
 import csv as csvmod
 import io
 from pathlib import Path
+from typing import Any
 
 from fundus.chunk.base import ChunkParams
 from fundus.chunk.tokens import count_tokens
@@ -30,11 +31,27 @@ def _render(header: list[str] | None, rows: list[list[str]]) -> str:
     return "\n".join(lines)
 
 
+def _is_binary_spreadsheet(data: bytes) -> bool:
+    # A real .xls is OLE2; .xlsx/.ods are ZIP. Anything else carrying a spreadsheet MIME is really
+    # text (senders routinely mislabel CSV exports as application/vnd.ms-excel) -> parse as CSV.
+    return data[:8].startswith((b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", b"PK\x03\x04"))
+
+
+def _parse_csv(data: bytes) -> list[tuple[str, list[list[str]]]]:
+    text = data.decode("utf-8-sig", errors="replace")  # -sig strips a UTF-8 BOM if present
+    text = text.replace("\r\n", "\n").replace("\r", "\n")  # normalize line endings for csv.reader
+    try:
+        dialect: Any = csvmod.Sniffer().sniff(text[:8192], delimiters=",;\t|")
+    except csvmod.Error:
+        dialect = csvmod.excel  # fall back to comma-separated
+    rows = [[_cell(c) for c in r] for r in csvmod.reader(io.StringIO(text), dialect)]
+    return [("", rows)]
+
+
 def parse_sheets(data: bytes, mime: str | None) -> list[tuple[str, list[list[str]]]]:
-    if mime == "text/csv" or mime is None:
-        text = data.decode("utf-8", errors="replace")
-        rows = [[_cell(c) for c in r] for r in csvmod.reader(io.StringIO(text))]
-        return [("", rows)]
+    # Trust the bytes over the declared MIME: only a genuine binary workbook goes to calamine.
+    if mime == "text/csv" or mime is None or not _is_binary_spreadsheet(data):
+        return _parse_csv(data)
     from python_calamine import CalamineWorkbook
 
     workbook = CalamineWorkbook.from_filelike(io.BytesIO(data))

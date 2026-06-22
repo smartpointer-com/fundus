@@ -143,6 +143,9 @@ class IndexDocument(BaseModel):
     source: str
     item_kind: str
     parent_id: str
+    # Raw source handle for follow-up: email Message-ID, file path, chat JID, or "<msgid>#<part>"
+    # for an attachment. Lets a search result be acted on (open the file, fetch the mail/message).
+    native_id: str = ""
     title: str | None = None
     body: str = ""  # searchable + auto-embedded
     ts: int = 0  # epoch seconds, sortable
@@ -152,3 +155,6 @@ class IndexDocument(BaseModel):
     mime: str | None = None
     lang: list[str] = Field(default_factory=list)
     msg_ids: list[str] | None = None  # e.g. expand a chat window back to messages
+    # Fan-out only: a vector Fundus computed for this doc. Not a stored field — the sink lifts it
+    # into Meili's `_vectors` on upsert and drops it from the document body.
+    vector: list[float] | None = None

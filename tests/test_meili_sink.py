@@ -64,6 +64,26 @@ def test_upsert_batches():
     assert [len(b) for b in idx.added] == [3, 3, 1]
 
 
+def test_upsert_lifts_vector_into_meili_vectors():
+    idx = FakeIndex()
+    sink = MeiliSink(index="c", client=FakeClient(idx))
+    doc = IndexDocument(
+        id="1", source="s", item_kind="file", parent_id="p", body="x", vector=[0.1, 0.2, 0.3]
+    )
+    sink.upsert([doc])
+    rec = idx.added[0][0]
+    assert rec["_vectors"] == {"default": [0.1, 0.2, 0.3]}
+    assert "vector" not in rec  # the raw field never reaches Meili
+
+
+def test_upsert_omits_vectors_when_unset():
+    idx = FakeIndex()
+    sink = MeiliSink(index="c", client=FakeClient(idx))
+    sink.upsert(_docs(1))
+    rec = idx.added[0][0]
+    assert "_vectors" not in rec and "vector" not in rec
+
+
 def test_delete_missing():
     idx = FakeIndex(search_response={"facetDistribution": {"parent_id": {"p1": 2, "p2": 1, "p3": 5}}})
     sink = MeiliSink(index="c", client=FakeClient(idx))

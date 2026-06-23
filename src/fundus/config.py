@@ -20,7 +20,11 @@ from pydantic import BaseModel, ConfigDict, Field
 class MeiliConfig(BaseModel):
     url: str = "http://127.0.0.1:7700"
     index: str = "corpus"
-    api_key: str | None = None  # falls back to env FUNDUS_MEILI_KEY
+    api_key: str | None = None  # admin/write key; falls back to env FUNDUS_MEILI_KEY
+    # Optional read-only, search-scoped key (env FUNDUS_MEILI_SEARCH_KEY). The MCP server prefers it
+    # but falls back to the admin key; worth setting only once the server is split out to a
+    # less-trusted process (while monolithic it already holds the admin key).
+    search_key: str | None = None
 
 
 class EmbedderConfig(BaseModel):
@@ -91,6 +95,26 @@ class ServiceConfig(BaseModel):
     env_file: str | None = None
 
 
+class ServeConfig(BaseModel):
+    # The read-only MCP server (`fundus serve`) and the thin client that reaches it.
+    host: str = "127.0.0.1"
+    port: int = 8181
+    # streamable-http is the durable MCP transport (HTTP+SSE was deprecated in the 2025-03 spec);
+    # "sse" stays available for legacy clients, "stdio" for a host-spawned local subprocess.
+    transport: str = "streamable-http"
+    # Bearer token clients must present (env FUNDUS_SERVE_TOKEN). Required for the HTTP transports so
+    # not just any local process can reach the server; this is the key shared with OpenClaw.
+    token: str | None = None
+    url: str | None = None  # client-side override: full endpoint URL of a running server
+
+    def endpoint(self) -> str:
+        """The URL a client uses to reach the server (derived from host/port/transport if unset)."""
+        if self.url:
+            return self.url
+        path = "/sse" if self.transport == "sse" else "/mcp"
+        return f"http://{self.host}:{self.port}{path}"
+
+
 class StorageConfig(BaseModel):
     # Single root for ALL Fundus runtime data: the search index, the SQLite caches, the per-source
     # cursors, and the run lock — each in its own subdirectory. Unset → $XDG_DATA_HOME/fundus
@@ -105,6 +129,7 @@ class FundusConfig(BaseModel):
     extractor: ExtractorConfig = Field(default_factory=ExtractorConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     service: ServiceConfig = Field(default_factory=ServiceConfig)
+    serve: ServeConfig = Field(default_factory=ServeConfig)
     # Corpus locales: used for localizedAttributes and as default OCR languages.
     locales: list[str] = Field(default_factory=lambda: ["eng"])
     # Indexing concurrency: a thread pool issues extraction requests in parallel so the
@@ -161,6 +186,10 @@ def load_config(path: str | Path | None = None) -> FundusConfig:
     cfg = FundusConfig.model_validate(data)
     if cfg.meilisearch.api_key is None:
         cfg.meilisearch.api_key = os.environ.get("FUNDUS_MEILI_KEY")
+    if cfg.meilisearch.search_key is None:
+        cfg.meilisearch.search_key = os.environ.get("FUNDUS_MEILI_SEARCH_KEY")
     if cfg.embedder.api_key is None:
         cfg.embedder.api_key = os.environ.get("FUNDUS_EMBED_KEY")
+    if cfg.serve.token is None:
+        cfg.serve.token = os.environ.get("FUNDUS_SERVE_TOKEN")
     return cfg

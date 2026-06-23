@@ -221,5 +221,10 @@ class NotmuchSource:
             for part_id, _filename, _mime in _attachment_parts(message.get("body") or []):
                 yield f"{mid}#{part_id}"
 
+    def locate(self, message_id: str) -> list[str]:
+        """Maildir file path(s) for a Message-ID, so a consumer can open the original email."""
+        out = self._run(["search", "--output=files", f"id:{message_id}"])
+        return [line.strip() for line in out.splitlines() if line.strip()]
+
     def current_cursor(self) -> Cursor:
         return self._next_cursor

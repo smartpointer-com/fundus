@@ -14,10 +14,21 @@
 #                          # (~/.local/share/fundus). The Meili index lives at <data_dir>/meili;
 #                          # `make up` mounts it automatically (see `fundus paths`).
 
+# [serve]                  # the read-only MCP server (`fundus serve`) and the thin client
+# host = "127.0.0.1"
+# port = 8181
+# transport = "streamable-http"   # durable; "sse" (legacy) or "stdio" also supported
+# token = "..."            # bearer token clients must present (or set FUNDUS_SERVE_TOKEN); this is
+#                          # the key you share with OpenClaw. Required for the HTTP transports.
+# url = "..."              # client-side only: full endpoint of a running server (else host/port)
+
 [meilisearch]
 url   = "http://127.0.0.1:7700"
 index = "corpus"
-# api_key = "..."          # or set FUNDUS_MEILI_KEY in the environment
+# api_key    = "..."       # ADMIN/write key (indexer + monolithic server); or set FUNDUS_MEILI_KEY
+# search_key = "..."       # OPTIONAL read-only SEARCH key; or set FUNDUS_MEILI_SEARCH_KEY. The MCP
+#                          # server prefers it but falls back to api_key — set it only when you split
+#                          # the server out to a less-trusted process. Must be a real Meili key.
 
 [embedder]
 # A bare-metal, OpenAI-compatible embeddings endpoint (e.g. MLX / llama.cpp / Ollama).

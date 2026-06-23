@@ -43,7 +43,7 @@ for agents. It is organized around two plugin families — **sources** and
 ```
 src/fundus/
   cli.py            Typer app: init | index | query | serve | sources | paths | service | embed-backfill | bakeoff
-  service/          launchd job generation + management for periodic indexing
+  service/          launchd job generation + management (index jobs + the MCP serve daemon)
   config.py         configuration model + loader (TOML + env)
   models.py         domain models (SourceItem, ExtractionResult/Block, Chunk, IndexDocument)
   log.py            structured logging
@@ -53,7 +53,8 @@ src/fundus/
   chunk/            base.Chunker + text / chat / tabular + dispatch
   index/            base.Sink + meili impl + settings + query
   embed/            embedder config (REST or fan-out userProvided) + fan-out client + vector cache
-  serve/            MCP server (read-only search)
+  serve/            read-only MCP server (search/sources/locate tools) + bearer-token gate
+  client/           fundus-client: thin MCP client for humans/scripts (a second console script)
   bakeoff/          extraction-engine comparison harness (+ optional LLM judge)
 docker/compose.yml  Meilisearch + extraction engines
 config/fundus.example.toml
@@ -124,7 +125,34 @@ vectors already in the index, making a re-run that changes little nearly free.
 artifacts rather than chunk fragments. Each result carries what's needed to act on
 it — a follow-up `ref` (email Message-ID / file path / chat JID), timestamp,
 source/kind, relevance score, and a matched snippet; `query` adds `--json` and
-`--fields`. `serve` exposes the same data as an MCP tool using the read-only key.
+`--fields`.
+
+## Read-only access for agents (MCP)
+
+`fundus serve` is the **read-only surface** handed to agents (e.g. OpenClaw). It
+exposes three MCP tools — `search` (the hybrid query above), `sources` (what's
+indexed and the corpus roots), and `locate` (resolve a hit's `ref` to an openable
+path: a file passes through, an email Message-ID resolves to its maildir file via
+notmuch). Because the corpus lives in shared directories the agent can read, "find
+then open the original" is: `search` → follow the `ref`/`path` → read the file.
+
+Read-only rests on the server only ever exposing read tools (no mutating tool
+exists) as a trusted host-side process, gated by:
+
+- **Bearer token.** Over HTTP the server is gated by a token
+  (`FUNDUS_SERVE_TOKEN`) checked by a pure-ASGI middleware, so no stray local
+  process reaches it. This token (never a Meili key) is what's shared with the agent.
+- **Meili search key (optional hardening).** The server prefers a search-scoped key
+  (`search_key` / `FUNDUS_MEILI_SEARCH_KEY`) and falls back to the admin key it
+  already holds. A separate key only earns its keep once the gateway is split out to
+  a less-trusted process; while monolithic, the admin-key fallback is fine.
+
+Transport is **streamable-HTTP** by default (HTTP+SSE was deprecated in the 2025-03
+MCP spec; `sse` and `stdio` remain available). OpenClaw consumes it via its native
+`openclaw mcp add <name> --url …` with a static bearer header. **`fundus-client`**
+is a second console script — a thin MCP client (holding only the endpoint + token,
+no Meili keys) that runs the same tools from a shell, for human operators and
+scripts.
 
 ## Search-index design
 
@@ -227,13 +255,21 @@ document — adding it triggers no index-settings change, and documents indexed
 before it existed simply read as "absent from the manifest" and get re-indexed
 once.
 
-## Periodic indexing (`fundus service`)
+## Service jobs (`fundus service`)
 
-On macOS, `fundus service install` generates and bootstraps two launchd jobs:
-`<prefix>.index` (incremental, every N minutes, `StartInterval` + `RunAtLoad`) and
-`<prefix>.index-full` (the nightly full reconcile, `StartCalendarInterval` at a
-wall-clock hour). The run-lock makes the two safe to overlap — an incremental that
-fires mid-full simply skips.
+On macOS, `fundus service install` generates and bootstraps up to three launchd
+jobs (all by default; scope with `--no-index` / `--no-serve`):
+
+- `<prefix>.index` — incremental indexing (`StartInterval` + `RunAtLoad`).
+- `<prefix>.index-full` — the nightly full reconcile (`StartCalendarInterval` at a
+  wall-clock hour).
+- `<prefix>.serve` — the read-only MCP server, a long-running daemon kept up with
+  `KeepAlive` + `RunAtLoad`.
+
+The two index jobs run as throttled **background** batch work (`ProcessType =
+Background`, `LowPriorityIO`); the server runs **unthrottled** so it stays
+responsive. The run-lock makes the index jobs safe to overlap — an incremental
+that fires mid-full simply skips.
 
 - **LaunchAgent (default)** runs in the login session; **`--daemon`** installs a
   LaunchDaemon (via `sudo`) that runs headless at boot — correct only when the
@@ -243,9 +279,10 @@ fires mid-full simply skips.
   dev build (it would break on any source change); run `make install` first, then
   invoke the installed CLI. Secrets are never written into the (world-readable)
   plist — the job wrapper sources an optional `env_file` at runtime.
-- Logs go to `<data_root>/logs/`; `status`, `restart`, and `run` (trigger now)
-  round out the subcommands. The pure plist generation lives in `service/spec.py`,
-  the launchctl/sudo side effects in `service/manager.py`.
+- Logs go to `<data_root>/logs/`; `status` (all jobs), `restart` (`--full` /
+  `--serve` to target one), and `run` (trigger an index now) round out the
+  subcommands. The pure plist generation lives in `service/spec.py`, the
+  launchctl/sudo side effects in `service/manager.py`.
 
 ## Dependencies
 

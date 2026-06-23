@@ -17,8 +17,13 @@ MEILI_DATA := $(shell $(FUNDUS) paths --meili-data 2>/dev/null || echo ./data/me
 
 .PHONY: install dev fmt lint test up down
 
-install:  ## Install the `fundus` CLI for use (isolated, survives deleting this repo).
-	pipx install .        # or: python3 -m pip install --user .
+install:  ## Install the fundus + fundus-client CLIs for use (isolated, survives deleting this repo).
+	@command -v pipx >/dev/null 2>&1 || { \
+		echo "pipx not found — install it first:"; \
+		echo "  brew install pipx && pipx ensurepath     # macOS (Homebrew Python is externally managed)"; \
+		echo "  python3 -m pip install --user pipx       # other Python"; \
+		exit 1; }
+	pipx install .        # exposes both console scripts (fundus, fundus-client)
 
 dev:  ## Set up the editable dev environment in ./$(VENV).
 	python3 -m venv $(VENV)

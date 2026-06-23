@@ -90,13 +90,19 @@ def plist_path(kind: Kind, label: str, home: Path) -> Path:
     return base / f"{label}.plist"
 
 
+def all_labels(label_prefix: str) -> list[str]:
+    """Every label fundus may install: the two index jobs and the serve daemon."""
+    return [f"{label_prefix}.index", f"{label_prefix}.index-full", f"{label_prefix}.serve"]
+
+
 def detect_kind(label_prefix: str, home: Path) -> Kind | None:
-    """Which kind is currently installed (by which plist exists), or None."""
-    label = f"{label_prefix}.index"
-    if plist_path("daemon", label, home).exists():
-        return "daemon"
-    if plist_path("agent", label, home).exists():
-        return "agent"
+    """Which kind is currently installed (by which plist exists), or None. Checks every label,
+    since an install may be index-only or serve-only."""
+    for label in all_labels(label_prefix):
+        if plist_path("daemon", label, home).exists():
+            return "daemon"
+        if plist_path("agent", label, home).exists():
+            return "agent"
     return None
 
 
@@ -136,8 +142,9 @@ def install(plan: Plan) -> list[str]:
     for job in plan.jobs():
         dest = _write_plist(job, kind, Path(plan.home))
         target = f"{domain_target(kind, uid)}/{job.label}"
-        # Idempotent: bootout any previous incarnation first (ignore "not loaded"), then bootstrap.
-        _run(["launchctl", "bootout", target], sudo=sudo, check=False)
+        # Idempotent: bootout any previous incarnation first, then bootstrap. capture=True swallows
+        # the expected "No such process" on a first install (nothing loaded to boot out).
+        _run(["launchctl", "bootout", target], sudo=sudo, check=False, capture=True)
         _run(["launchctl", "bootstrap", domain_target(kind, uid), str(dest)], sudo=sudo)
         labels.append(job.label)
     return labels
@@ -147,8 +154,9 @@ def uninstall(label_prefix: str, kind: Kind, home: Path) -> list[str]:
     uid = os.getuid()
     sudo = kind == "daemon"
     removed: list[str] = []
-    for label in (f"{label_prefix}.index", f"{label_prefix}.index-full"):
-        _run(["launchctl", "bootout", f"{domain_target(kind, uid)}/{label}"], sudo=sudo, check=False)
+    for label in all_labels(label_prefix):
+        _run(["launchctl", "bootout", f"{domain_target(kind, uid)}/{label}"],
+             sudo=sudo, check=False, capture=True)
         dest = plist_path(kind, label, home)
         if dest.exists():
             if kind == "daemon":

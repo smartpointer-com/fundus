@@ -19,6 +19,7 @@ dependencies = [
   "puremagic>=1.27",
   "structlog>=24.1",
   "mcp>=1.0",
+  "uvicorn>=0.30",  # ASGI server for the MCP HTTP transports
   "markdown-it-py>=3.0",
 ]
 
@@ -35,6 +36,7 @@ dev = [
 
 [project.scripts]
 fundus = "fundus.cli:app"
+fundus-client = "fundus.client.cli:client_app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/fundus"]

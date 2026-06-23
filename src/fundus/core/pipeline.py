@@ -227,16 +227,21 @@ class Pipeline:
         return total
 
 
+def _query_embedder(config: FundusConfig) -> EmbeddingClient | None:
+    """A host-side embedder for queries — only when a model instruct prefix is configured."""
+    cfg = config.embedder
+    if not cfg.query_prompt:
+        return None
+    return EmbeddingClient(
+        url=cfg.query_url or cfg.url,
+        model=cfg.model,
+        api_key=cfg.api_key,
+        query_prompt=cfg.query_prompt,
+    )
+
+
 def build_sink(config: FundusConfig) -> MeiliSink:
     embedder_cfg = config.embedder
-    query_embedder = None
-    if embedder_cfg.query_prompt:  # opt-in: only self-embed queries when a prefix is configured
-        query_embedder = EmbeddingClient(
-            url=embedder_cfg.query_url or embedder_cfg.url,
-            model=embedder_cfg.model,
-            api_key=embedder_cfg.api_key,
-            query_prompt=embedder_cfg.query_prompt,
-        )
     embedders = (
         user_provided_embedder(embedder_cfg)
         if embedder_cfg.fanout
@@ -247,7 +252,32 @@ def build_sink(config: FundusConfig) -> MeiliSink:
         index=config.meilisearch.index,
         api_key=config.meilisearch.api_key,
         embedders=embedders,
-        query_embedder=query_embedder,
+        query_embedder=_query_embedder(config),
+    )
+
+
+def resolve_search_key(config: FundusConfig) -> str:
+    """The key the MCP server uses to reach Meili: the search-scoped key if set, else the admin key.
+
+    A separate search key only earns its keep once the gateway is split out to a less-trusted
+    process; while it's a monolithic host-side server that already holds the admin key, falling back
+    to it is fine. Supply a scoped key (search_key / FUNDUS_MEILI_SEARCH_KEY) when you split it out.
+    """
+    mc = config.meilisearch
+    key = mc.search_key or mc.api_key
+    if not key:
+        raise RuntimeError("no Meili key: set FUNDUS_MEILI_KEY (or a scoped FUNDUS_MEILI_SEARCH_KEY)")
+    return key
+
+
+def build_search_sink(config: FundusConfig) -> MeiliSink:
+    """A search-only sink for the MCP server — carries no upsert embedder config; it only queries."""
+    return MeiliSink(
+        url=config.meilisearch.url,
+        index=config.meilisearch.index,
+        api_key=resolve_search_key(config),
+        embedders=None,
+        query_embedder=_query_embedder(config),
     )
 
 

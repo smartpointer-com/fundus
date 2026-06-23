@@ -37,7 +37,7 @@ machine-specific setup notes.
 ## Quick start
 
 ```bash
-make install                       # install the `fundus` CLI (isolated; survives deleting this repo)
+make install                       # install the fundus + fundus-client CLIs (isolated; survive deleting this repo)
 cp config/fundus.example.toml ~/.config/fundus.toml   # then edit paths (and optionally [storage].data_dir)
 make up                            # start Meilisearch + extraction engines (mounts your data root)
 fundus init                        # apply index settings
@@ -50,22 +50,56 @@ default `$XDG_DATA_HOME/fundus`, overridable via `[storage].data_dir` in the
 config. Run `fundus paths` to see the resolved locations. `make up`/`make down`
 manage the service stack from this repo.
 
-## Scheduling (macOS)
+## Service jobs (macOS)
 
-`fundus service install` sets up two launchd jobs — incremental (every 30 min) and
-a nightly full reconcile — pointing at the installed CLI:
+`fundus service install` sets up three launchd jobs pointing at the installed CLI —
+incremental indexing (every 30 min), a nightly full reconcile, and the read-only
+MCP server (kept alive):
 
 ```bash
 make install                       # the service must point at an installed binary, not the dev venv
 fundus service install             # LaunchAgent (login session); --daemon for a headless LaunchDaemon
-fundus service status              # state, last exit, run count
+fundus service install --no-serve  # index jobs only;  --no-index for a server-only host
+fundus service status              # state, last exit, run count (all jobs)
 fundus service run                 # trigger an incremental run now (test without waiting)
+fundus service restart --serve     # restart the MCP server (e.g. after a config change)
 fundus service uninstall
 ```
 
 Flags `--interval`, `--full-at HH:MM`, `--label-prefix`, and `--env-file` (or the
-`[service]` config block) tune it. Set `--full-at` *after* whatever syncs your
-corpus to disk. Logs land in `<data_root>/logs/`.
+`[service]` config block) tune it; the server's host/port/transport come from
+`[serve]`. Set `--full-at` *after* whatever syncs your corpus to disk. Logs land in
+`<data_root>/logs/`.
+
+## Read-only access for agents (MCP)
+
+`fundus serve` runs a read-only MCP server exposing `search`, `sources`, and
+`locate` tools — the surface you hand to an agent. It binds only to a search-scoped
+Meili key (never the admin key) and, over HTTP, is gated by a bearer token:
+
+```bash
+export FUNDUS_SERVE_TOKEN=…         # the token you share with the agent (required over HTTP)
+# export FUNDUS_MEILI_SEARCH_KEY=…  # optional: a scoped key; else it uses the admin key it holds
+fundus serve                        # streamable-HTTP on 127.0.0.1:8181 by default
+```
+
+To keep it running, install it as a managed daemon instead of launching by hand —
+`fundus service install` includes it as the `<prefix>.serve` job (see *Service jobs*).
+
+Point an agent at it — OpenClaw has native MCP support:
+
+```bash
+openclaw mcp add fundus --url http://127.0.0.1:8181/mcp --header "Authorization: Bearer $FUNDUS_SERVE_TOKEN"
+```
+
+For humans and shell scripts, **`fundus-client`** is a thin MCP client (holds only
+the endpoint + token, no Meili keys):
+
+```bash
+fundus-client query "electricity bill" --json
+fundus-client sources
+fundus-client locate "<a ref from a search hit>"
+```
 
 ## Local deployment notes
 
@@ -93,8 +127,8 @@ make test      # pytest
 make up        # start Meilisearch + extraction engines (Docker)
 ```
 
-(`make install` is the *user* install — it puts the `fundus` CLI on your PATH via
-`pipx`, independent of this tree. Contributors want `make dev`.)
+(`make install` is the *user* install — it puts the `fundus` and `fundus-client`
+CLIs on your PATH via `pipx`, independent of this tree. Contributors want `make dev`.)
 
 ## License
 

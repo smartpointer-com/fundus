@@ -2,7 +2,9 @@
 
 Loaded from a TOML file (default ``$XDG_CONFIG_HOME/fundus.toml`` or
 ``~/.config/fundus.toml``). Secrets follow a value-with-env-fallback convention:
-a literal value in config, otherwise a named environment variable.
+a literal value in config, otherwise a named environment variable. An optional
+``env_file`` is sourced at startup so those variables can live in one secrets file
+rather than the shell environment.
 
 Nothing here is hard-coded to a particular machine — all source locations come
 from the user's config.
@@ -11,6 +13,8 @@ from the user's config.
 from __future__ import annotations
 
 import os
+import shlex
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -86,13 +90,12 @@ class SourceConfig(BaseModel):
 
 class ServiceConfig(BaseModel):
     # Defaults for `fundus service` (launchd jobs). Each is overridable by an install-time flag.
-    # label_prefix yields the two job labels <prefix>.index and <prefix>.index-full; use your own
-    # reverse-DNS convention (e.g. com.you.fundus). env_file, if set, is sourced by the job wrapper
-    # at runtime so secrets (FUNDUS_MEILI_KEY, ...) never live in the world-readable plist.
+    # label_prefix yields the job labels <prefix>.index / .index-full / .serve; use your own
+    # reverse-DNS convention (e.g. com.you.fundus). Secrets come from the top-level `env_file`, which
+    # every fundus process sources at startup — so they never live in the world-readable plist.
     label_prefix: str = "fundus"
     interval_minutes: int = 30  # incremental cadence
     full_at: str = "03:00"  # nightly full-reconcile wall-clock time (HH:MM)
-    env_file: str | None = None
 
 
 class ServeConfig(BaseModel):
@@ -136,6 +139,10 @@ class FundusConfig(BaseModel):
     # services (docling/tika, then Meili -> embedder) keep the host cores busy. Tune to the
     # extraction service's capacity and container memory.
     workers: int = Field(default_factory=lambda: min(8, os.cpu_count() or 4))
+    # A KEY=VALUE secrets file (e.g. "~/.config/fundus.env") that every fundus process sources at
+    # startup if it exists — so FUNDUS_MEILI_KEY / FUNDUS_SERVE_TOKEN / FUNDUS_EMBED_KEY can live in
+    # one file instead of the shell. Default unset (no built-in path); override with $FUNDUS_ENV_FILE.
+    env_file: str | None = None
     sources: list[SourceConfig] = Field(default_factory=list)
 
     # --- Resolved data locations (all under one root; see StorageConfig) ---
@@ -180,10 +187,39 @@ def _data_home() -> Path:
     return Path(base) / "fundus"
 
 
+def _bash_env(prelude: str) -> dict[str, str]:
+    out = subprocess.run(
+        ["bash", "-c", f"{prelude}env -0"], check=True, capture_output=True, text=True
+    ).stdout
+    return dict(kv.split("=", 1) for kv in out.split("\0") if "=" in kv)
+
+
+def source_env_file(path: Path) -> None:
+    """Source a KEY=VALUE secrets file into ``os.environ`` via bash, so quoting/``export`` work and
+    we never reimplement env parsing. Diffs the environment before/after sourcing and applies the
+    file's contributions (ignoring bash-internal vars); a missing or malformed file is skipped."""
+    if not path.is_file():
+        return
+    try:
+        subprocess.run(["bash", "-n", str(path)], check=True, capture_output=True)  # syntax check
+        before = _bash_env("")
+        after = _bash_env(f"set -a; . {shlex.quote(str(path))}; set +a; ")
+    except (subprocess.CalledProcessError, OSError, ValueError):
+        return
+    ignore = {"_", "SHLVL", "PWD", "OLDPWD"}  # bash sets these itself, not from the file
+    for key, value in after.items():
+        if key not in ignore and before.get(key) != value:
+            os.environ[key] = value
+
+
 def load_config(path: str | Path | None = None) -> FundusConfig:
     target = Path(path) if path else default_config_path()
     data = tomllib.loads(target.read_text()) if target.exists() else {}
     cfg = FundusConfig.model_validate(data)
+    # Source the secrets file (if any) BEFORE the env fallbacks below read those variables.
+    env_file = os.environ.get("FUNDUS_ENV_FILE") or cfg.env_file
+    if env_file:
+        source_env_file(Path(env_file).expanduser())
     if cfg.meilisearch.api_key is None:
         cfg.meilisearch.api_key = os.environ.get("FUNDUS_MEILI_KEY")
     if cfg.meilisearch.search_key is None:

@@ -278,7 +278,8 @@ that fires mid-full simply skips.
 - **Points at the *installed* binary.** `install` refuses to wire up an editable
   dev build (it would break on any source change); run `make install` first, then
   invoke the installed CLI. Secrets are never written into the (world-readable)
-  plist — the job wrapper sources an optional `env_file` at runtime.
+  plist — the plist execs `fundus` directly, and `fundus` sources the config's
+  `env_file` itself at startup (see Configuration).
 - Logs go to `<data_root>/logs/`; `status` (all jobs), `restart` (`--full` /
   `--serve` to target one), and `run` (trigger an index now) round out the
   subcommands. The pure plist generation lives in `service/spec.py`, the
@@ -307,6 +308,14 @@ A single TOML file (`$XDG_CONFIG_HOME/fundus.toml` or `~/.config/fundus.toml`),
 env-overridable, with a value-with-env-fallback convention for secrets. See
 [`config/fundus.example.toml`](../config/fundus.example.toml). Every source and
 path is supplied here — the toolkit ships with no built-in locations.
+
+**Secrets.** Keys (`FUNDUS_MEILI_KEY`, `FUNDUS_SERVE_TOKEN`, `FUNDUS_EMBED_KEY`)
+come from the environment. A configurable `env_file` (e.g. `~/.config/fundus.env`,
+overridable with `$FUNDUS_ENV_FILE`) is **sourced at startup by every `fundus` /
+`fundus-client` invocation** — via bash, so quoting and `export` work — so the
+keys can live in one file rather than the shell, and so launchd jobs (which exec
+`fundus` directly) get them without any wrapper. The default is unset; no path is
+baked into the toolkit.
 
 **Data layout.** All runtime data lives under one root — `[storage].data_dir`,
 defaulting to `$XDG_DATA_HOME/fundus` — in named subdirectories: `meili/` (the

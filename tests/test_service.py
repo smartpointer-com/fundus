@@ -16,7 +16,6 @@ def _plan(kind="agent", **kw):
         label_prefix="com.test.fundus",
         fundus_bin="/opt/pipx/fundus",
         config_path="/home/u/.config/fundus.toml",
-        env_file="/home/u/.secrets/fundus.env",
         logs_dir="/home/u/fundus/logs",
         interval_minutes=30,
         full_at="04:00",
@@ -40,28 +39,14 @@ def test_parse_hhmm():
             parse_hhmm(bad)
 
 
-def test_fundus_command_sources_secrets_and_execs():
-    cmd = fundus_command("/opt/pipx/fundus", "/cfg.toml", "/sec.env", "index")
-    assert cmd[:2] == ["/bin/bash", "-c"]
-    script = cmd[2]
-    assert ". /sec.env" in script and "set -a" in script  # secrets sourced at runtime
-    assert "exec /opt/pipx/fundus index --config /cfg.toml" in script
-
-
-def test_fundus_command_full_and_no_env_file():
-    script = fundus_command("/b/fundus", "/cfg.toml", None, "index", "--full")[2]
-    assert "index --full --config /cfg.toml" in script
-    assert "set -a" not in script  # nothing to source
-
-
-def test_fundus_command_serve():
-    script = fundus_command("/b/fundus", "/cfg.toml", None, "serve")[2]
-    assert "exec /b/fundus serve --config /cfg.toml" in script
-
-
-def test_fundus_command_quotes_paths_with_spaces():
-    script = fundus_command("/b/fundus", "/with space/cfg.toml", None, "index")[2]
-    assert "'/with space/cfg.toml'" in script
+def test_fundus_command_is_a_direct_exec():
+    # No shell wrapper, no secret sourcing — fundus self-sources its env_file at startup.
+    assert fundus_command("/opt/pipx/fundus", "/cfg.toml", "index") == \
+        ["/opt/pipx/fundus", "index", "--config", "/cfg.toml"]
+    assert fundus_command("/b/fundus", "/cfg.toml", "index", "--full") == \
+        ["/b/fundus", "index", "--full", "--config", "/cfg.toml"]
+    assert fundus_command("/b/fundus", "/cfg.toml", "serve") == \
+        ["/b/fundus", "serve", "--config", "/cfg.toml"]
 
 
 # --- plist generation -----------------------------------------------------------------------
@@ -88,7 +73,7 @@ def test_serve_job_kept_alive_and_responsive():
     assert p["KeepAlive"] is True and p["RunAtLoad"] is True  # a server: stay up, start at load
     assert "ProcessType" not in p and "LowPriorityIO" not in p  # responsive, not throttled
     assert "StartInterval" not in p and "StartCalendarInterval" not in p  # no schedule
-    assert "serve --config" in srv.program_arguments[2]
+    assert srv.program_arguments == ["/opt/pipx/fundus", "serve", "--config", "/home/u/.config/fundus.toml"]
 
 
 def test_include_toggles_select_jobs():

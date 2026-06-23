@@ -3,15 +3,14 @@
 Up to three jobs per install: ``<prefix>.index`` (incremental, every N minutes),
 ``<prefix>.index-full`` (the nightly rsync-style full reconcile, at a wall-clock
 time), and ``<prefix>.serve`` (the long-running read-only MCP server, kept alive).
-Each plist runs a small login-shell wrapper that optionally sources a secrets
-env-file at runtime and then execs the *installed* ``fundus`` binary, so no secret
-ever lands in the world-readable plist. Everything here is a plain data transform
-(→ a plist dict) to keep it unit-testable without touching launchd.
+Each plist execs the *installed* ``fundus`` binary directly; secrets come from the
+config's ``env_file``, which fundus sources itself at startup, so no secret ever
+lands in the world-readable plist. Everything here is a plain data transform (→ a
+plist dict) to keep it unit-testable without touching launchd.
 """
 
 from __future__ import annotations
 
-import shlex
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -31,13 +30,11 @@ def parse_hhmm(value: str) -> dict[str, int]:
     return {"Hour": hour, "Minute": minute}
 
 
-def fundus_command(fundus_bin: str, config_path: str, env_file: str | None, *args: str) -> list[str]:
-    """ProgramArguments: a bash wrapper that sources secrets (if any) then execs ``fundus <args>``."""
-    inner = f"exec {shlex.quote(fundus_bin)} {' '.join(args)} --config {shlex.quote(config_path)}"
-    if env_file:
-        src = shlex.quote(env_file)
-        inner = f"set -a; [ -r {src} ] && . {src}; set +a; {inner}"
-    return ["/bin/bash", "-c", inner]
+def fundus_command(fundus_bin: str, config_path: str, *args: str) -> list[str]:
+    """ProgramArguments for a launchd job: exec the installed fundus directly. Secrets come from the
+    config's ``env_file`` (fundus sources it at startup), so the plist carries none and needs no
+    shell wrapper."""
+    return [fundus_bin, *args, "--config", config_path]
 
 
 @dataclass(frozen=True)
@@ -91,7 +88,6 @@ class Plan:
     label_prefix: str
     fundus_bin: str
     config_path: str
-    env_file: str | None
     logs_dir: str
     interval_minutes: int
     full_at: str
@@ -129,7 +125,7 @@ class Plan:
         if self.include_index:
             out.append(Job(
                 label=self.incremental_label,
-                program_arguments=fundus_command(self.fundus_bin, self.config_path, self.env_file, "index"),
+                program_arguments=fundus_command(self.fundus_bin, self.config_path, "index"),
                 log_path=f"{self.logs_dir}/index.log",
                 start_interval=self.interval_minutes * 60,
                 run_at_load=True,  # catch up after sleep/boot
@@ -137,7 +133,7 @@ class Plan:
             ))
             out.append(Job(
                 label=self.full_label,
-                program_arguments=fundus_command(self.fundus_bin, self.config_path, self.env_file, "index", "--full"),
+                program_arguments=fundus_command(self.fundus_bin, self.config_path, "index", "--full"),
                 log_path=f"{self.logs_dir}/index-full.log",
                 calendar=parse_hhmm(self.full_at),
                 run_at_load=False,  # never kick a heavy reconcile at load
@@ -146,7 +142,7 @@ class Plan:
         if self.include_serve:
             out.append(Job(
                 label=self.serve_label,
-                program_arguments=fundus_command(self.fundus_bin, self.config_path, self.env_file, "serve"),
+                program_arguments=fundus_command(self.fundus_bin, self.config_path, "serve"),
                 log_path=f"{self.logs_dir}/serve.log",
                 run_at_load=True,
                 keep_alive=True,  # a server: keep it up

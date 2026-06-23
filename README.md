@@ -66,10 +66,11 @@ fundus service restart --serve     # restart the MCP server (e.g. after a config
 fundus service uninstall
 ```
 
-Flags `--interval`, `--full-at HH:MM`, `--label-prefix`, and `--env-file` (or the
-`[service]` config block) tune it; the server's host/port/transport come from
-`[serve]`. Set `--full-at` *after* whatever syncs your corpus to disk. Logs land in
-`<data_root>/logs/`.
+Flags `--interval`, `--full-at HH:MM`, and `--label-prefix` (or the `[service]`
+config block) tune it; the server's host/port/transport come from `[serve]`. The
+jobs run `fundus` directly and get their secrets from the configured `env_file`
+(see below). Set `--full-at` *after* whatever syncs your corpus to disk. Logs land
+in `<data_root>/logs/`.
 
 ## Read-only access for agents (MCP)
 
@@ -82,6 +83,9 @@ export FUNDUS_SERVE_TOKEN=…         # the token you share with the agent (requ
 # export FUNDUS_MEILI_SEARCH_KEY=…  # optional: a scoped key; else it uses the admin key it holds
 fundus serve                        # streamable-HTTP on 127.0.0.1:8181 by default
 ```
+
+(Or put those in a secrets file and set `env_file` in the config — every `fundus` /
+`fundus-client` invocation sources it at startup, so you don't export by hand.)
 
 To keep it running, install it as a managed daemon instead of launching by hand —
 `fundus service install` includes it as the `<prefix>.serve` job (see *Service jobs*).

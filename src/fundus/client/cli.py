@@ -75,14 +75,23 @@ def _unwrap(exc: BaseException) -> BaseException:
     return exc
 
 
+def _failure_message(endpoint: str, has_token: bool, reason: object) -> str:
+    """Turn a transport/auth error into an actionable one-liner."""
+    text = str(reason).lower()
+    if "401" in text or "unauthorized" in text:
+        if not has_token:
+            return f"unauthorized ({endpoint}): no bearer token sent — set FUNDUS_SERVE_TOKEN or pass --token"
+        return (f"unauthorized ({endpoint}): the server rejected the token — make sure it matches the "
+                f"server's FUNDUS_SERVE_TOKEN")
+    return f"request to {endpoint} failed: {reason}"
+
+
 def _invoke(cfg: FundusConfig, url: str | None, token: str | None, transport: str | None, tool: str, args: dict[str, Any]) -> Any:
     endpoint, tok, tr = _resolve(cfg, url, token, transport)
     try:
         return asyncio.run(_call(endpoint, tok, tr, tool, args))
     except Exception as exc:  # noqa: BLE001 - surface any transport/auth failure as a clean message
-        reason = _unwrap(exc)
-        hint = " (check the bearer token)" if "401" in str(reason) else ""
-        typer.echo(f"fundus-client: request to {endpoint} failed: {reason}{hint}", err=True)
+        typer.echo(f"fundus-client: {_failure_message(endpoint, bool(tok), _unwrap(exc))}", err=True)
         raise typer.Exit(code=1) from None
 
 

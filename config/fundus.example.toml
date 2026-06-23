@@ -1,11 +1,14 @@
 # Fundus configuration (TOML). Copy to ~/.config/fundus.toml and edit.
 # Every path below is an EXAMPLE — point them at your own corpus locations.
 
+# env_file = "~/.config/fundus.env"    # a KEY=VALUE secrets file every fundus process sources at
+#                          # startup if it exists — so FUNDUS_MEILI_KEY / FUNDUS_SERVE_TOKEN /
+#                          # FUNDUS_EMBED_KEY live in one file, not your shell. Override: $FUNDUS_ENV_FILE.
+
 # [service]                # defaults for `fundus service install` (launchd jobs); each is also a flag
-# label_prefix = "fundus"  # job labels become <prefix>.index and <prefix>.index-full (use reverse-DNS)
+# label_prefix = "fundus"  # job labels become <prefix>.index / .index-full / .serve (use reverse-DNS)
 # interval_minutes = 30    # incremental indexing cadence
 # full_at = "03:00"        # nightly full-reconcile time (HH:MM); set it AFTER your corpus sync finishes
-# env_file = "~/.secrets/fundus.env"   # sourced at runtime for secrets; never written into the plist
 
 # [storage]
 # data_dir = "~/fundus"    # single root for ALL Fundus runtime data — the search index, the

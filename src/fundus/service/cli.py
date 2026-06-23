@@ -67,7 +67,6 @@ def install(
     serve: bool = typer.Option(True, "--serve/--no-serve", help="Install the long-running read-only MCP server."),
     interval: int | None = typer.Option(None, help="Incremental cadence in minutes."),
     full_at: str | None = typer.Option(None, help="Nightly full-reconcile time, HH:MM."),
-    env_file: str | None = typer.Option(None, help="File sourced for secrets at runtime."),
     label_prefix: str | None = typer.Option(None, help="Job label prefix (reverse-DNS)."),
     config: Path | None = ConfigOpt,
 ) -> None:
@@ -80,13 +79,11 @@ def install(
         raise typer.Exit(code=1)
     try:
         fundus_bin = manager.ensure_installed_binary()
-        ef = env_file if env_file is not None else svc.env_file
         plan = Plan(
             kind="daemon" if daemon else "agent",
             label_prefix=label_prefix or svc.label_prefix,
             fundus_bin=str(fundus_bin),
             config_path=_config_path(config),
-            env_file=str(Path(ef).expanduser()) if ef else None,
             logs_dir=str(cfg.logs_dir()),
             interval_minutes=interval or svc.interval_minutes,
             full_at=full_at or svc.full_at,
@@ -113,11 +110,11 @@ def install(
         s = cfg.serve
         typer.echo(f"  serve:    {s.transport} on {s.host}:{s.port} (kept alive)")
     typer.echo(f"  logs:     {plan.logs_dir}/")
-    if plan.env_file is None:
-        # launchd jobs get a near-empty environment, so secrets from your shell are invisible to them.
+    if cfg.env_file is None:
+        # launchd jobs get a near-empty environment; without an env_file fundus can't see secrets.
         typer.echo(
-            "  WARNING: no env_file — jobs run with a minimal environment and won't see your shell "
-            "secrets (Meili key, serve token). Set [service].env_file or pass --env-file, then reinstall.",
+            "  WARNING: no env_file in config — the jobs won't have any secrets (Meili key, serve "
+            "token). Set a top-level `env_file` to your secrets file, then reinstall.",
             err=True,
         )
 

@@ -38,3 +38,19 @@ def test_resolve_rejects_stdio():
     cfg = FundusConfig.model_validate({"serve": {"transport": "stdio"}})
     with pytest.raises(typer.BadParameter):
         _resolve(cfg, None, None, None)
+
+
+def test_failure_message_unauthorized_distinguishes_no_token_from_wrong_token():
+    from fundus.client.cli import _failure_message
+
+    no_token = _failure_message("http://h/mcp", False, Exception("unauthorized"))
+    assert "no bearer token" in no_token and "FUNDUS_SERVE_TOKEN" in no_token
+    wrong = _failure_message("http://h/mcp", True, Exception("Client error '401 Unauthorized'"))
+    assert "rejected the token" in wrong
+
+
+def test_failure_message_other_error_passes_through():
+    from fundus.client.cli import _failure_message
+
+    msg = _failure_message("http://h/mcp", True, Exception("Connection refused"))
+    assert "Connection refused" in msg and "failed" in msg

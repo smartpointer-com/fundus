@@ -68,3 +68,22 @@ def test_data_dir_from_loaded_config(tmp_path):
     f.write_text(f'[storage]\ndata_dir = "{tmp_path / "store"}"\n')
     cfg = load_config(f)
     assert cfg.data_root() == tmp_path / "store"
+
+
+def test_load_config_sources_env_file(tmp_path, monkeypatch):
+    # monkeypatch.delenv records the originals so the sourced vars are restored on teardown.
+    monkeypatch.delenv("FUNDUS_MEILI_KEY", raising=False)
+    monkeypatch.delenv("FUNDUS_SERVE_TOKEN", raising=False)
+    env = tmp_path / "secrets.env"
+    env.write_text('FUNDUS_MEILI_KEY="from-file"\nexport FUNDUS_SERVE_TOKEN=tok123\n')
+    cfg_file = tmp_path / "fundus.toml"
+    cfg_file.write_text(f'env_file = "{env}"\n')
+    cfg = load_config(cfg_file)
+    assert cfg.meilisearch.api_key == "from-file"  # quoted value, sourced via bash then picked up
+    assert cfg.serve.token == "tok123"  # `export KEY=val` form also handled
+
+
+def test_load_config_ignores_missing_env_file(tmp_path):
+    f = tmp_path / "fundus.toml"
+    f.write_text(f'env_file = "{tmp_path / "nope.env"}"\n')
+    assert load_config(f).meilisearch.index == "corpus"  # absent file is skipped, not fatal

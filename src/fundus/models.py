@@ -10,13 +10,24 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 from pydantic import BaseModel, Field
 
 # An opaque, per-source incremental position (e.g. a notmuch lastmod, a max
 # rowid, or an ISO timestamp). Only the owning source interprets it.
 Cursor = str
+
+
+class FileStat(NamedTuple):
+    """A file's change fingerprint for ``--full`` reconciliation (rsync-style quick-check).
+
+    Size plus mtime is enough to detect an edit without hashing contents; a changed
+    file almost always changes its size, and any in-place edit moves its mtime.
+    """
+
+    size: int
+    mtime: float
 
 
 class TextPayload(BaseModel):
@@ -63,6 +74,8 @@ class SourceItem(BaseModel):
     title: str | None = None
     path: str | None = None
     mime_type: str | None = None
+    size: int | None = None  # file items only: byte size (fingerprint for --full reconcile)
+    mtime: float | None = None  # file items only: epoch mtime (fingerprint for --full reconcile)
     ts: datetime
     ts_start: datetime | None = None
     ts_end: datetime | None = None
@@ -166,6 +179,10 @@ class IndexDocument(BaseModel):
     mime: str | None = None
     lang: list[str] = Field(default_factory=list)
     msg_ids: list[str] | None = None  # e.g. expand a chat window back to messages
+    # File fingerprint (0 for non-file items). Stored, not filterable; `--full` reads it back as the
+    # indexed manifest and diffs it against the live tree to find edited/new/removed files.
+    size: int = 0
+    mtime: float = 0.0
     # Fan-out only: a vector Fundus computed for this doc. Not a stored field — the sink lifts it
     # into Meili's `_vectors` on upsert and drops it from the document body.
     vector: list[float] | None = None

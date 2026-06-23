@@ -10,12 +10,14 @@ from typing import Any
 import typer
 
 from fundus.bakeoff.runner import run_bakeoff
-from fundus.config import default_lock_path, load_config
+from fundus.config import load_config
 from fundus.core.locking import AlreadyRunning, run_lock
 from fundus.core.pipeline import build_pipeline, build_sink
 from fundus.extract.registry import build_extractor
+from fundus.service.cli import service_app
 
 app = typer.Typer(add_completion=False, help="Index and search a heterogeneous corpus.")
+app.add_typer(service_app, name="service")
 
 ConfigOpt = typer.Option(None, "--config", "-c", help="Path to fundus.toml (default: XDG).")
 
@@ -31,7 +33,11 @@ def init(config: Path | None = ConfigOpt) -> None:
 @app.command()
 def index(
     only: str | None = typer.Option(None, help="Limit to a single source by name."),
-    full: bool = typer.Option(False, help="Full pass plus deletion reconciliation."),
+    full: bool = typer.Option(
+        False,
+        help="Reconcile against reality: prune deletions, and for file trees re-index edits "
+        "(by size+mtime) the cursor can't see.",
+    ),
     force: bool = typer.Option(False, help="Ignore saved cursors and re-read everything."),
     workers: int | None = typer.Option(None, help="Override the indexing worker count."),
     config: Path | None = ConfigOpt,
@@ -41,7 +47,7 @@ def index(
     if workers is not None:
         cfg.workers = workers
     try:
-        with run_lock(default_lock_path()):
+        with run_lock(str(cfg.lock_path())):
             counts = build_pipeline(cfg).index(only=only, full=full, force=force)
     except AlreadyRunning:
         typer.echo("Another fundus run holds the lock; skipping.")
@@ -116,12 +122,11 @@ def serve(config: Path | None = ConfigOpt) -> None:
 def embed_backfill(config: Path | None = ConfigOpt) -> None:
     """Seed the embedding cache from vectors already in the index, so the next re-index reuses
     them instead of recomputing. One-time bootstrap; the cache self-populates thereafter."""
-    from fundus.config import default_embed_cache_path
     from fundus.embed.backfill import backfill_embedding_cache
     from fundus.embed.cache import SqliteEmbeddingCache
 
     cfg = load_config(config)
-    cache = SqliteEmbeddingCache(str(default_embed_cache_path()), cfg.embedder.model)
+    cache = SqliteEmbeddingCache(str(cfg.embed_cache_path()), cfg.embedder.model)
     written = backfill_embedding_cache(
         url=cfg.meilisearch.url,
         index=cfg.meilisearch.index,
@@ -129,6 +134,30 @@ def embed_backfill(config: Path | None = ConfigOpt) -> None:
         cache=cache,
     )
     typer.echo(f"Backfilled {written:,} vectors into the embedding cache.")
+
+
+@app.command(name="paths")
+def paths(
+    meili_data: bool = typer.Option(
+        False, "--meili-data", help="Print only the Meilisearch data directory (for the Docker stack)."
+    ),
+    config: Path | None = ConfigOpt,
+) -> None:
+    """Show where Fundus keeps its data (all under one configurable root)."""
+    cfg = load_config(config)
+    if meili_data:  # machine-readable: `make up` mounts this as the Meili volume
+        typer.echo(str(cfg.meili_dir()))
+        return
+    rows = [
+        ("data root", cfg.data_root()),
+        ("meili index", f"{cfg.meili_dir()}  (Docker volume)"),
+        ("extraction cache", cfg.extraction_cache_path()),
+        ("embedding cache", cfg.embed_cache_path()),
+        ("cursors", cfg.cursors_path()),
+        ("run lock", cfg.lock_path()),
+    ]
+    for label, value in rows:
+        typer.echo(f"{label + ':':18}{value}")
 
 
 @app.command(name="sources")

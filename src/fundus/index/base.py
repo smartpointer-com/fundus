@@ -10,7 +10,7 @@ from typing import Protocol, Sequence, runtime_checkable
 
 from pydantic import BaseModel, Field
 
-from fundus.models import IndexDocument
+from fundus.models import FileStat, IndexDocument
 
 
 class IndexSettings(BaseModel):
@@ -40,3 +40,7 @@ class Sink(Protocol):
     def upsert(self, docs: Sequence[IndexDocument]) -> None: ...
 
     def delete_missing(self, source: str, live_parent_ids: set[str]) -> int: ...
+
+    def delete_parents(self, parent_ids: set[str]) -> int: ...
+
+    def indexed_fingerprints(self, source: str) -> dict[str, FileStat]: ...

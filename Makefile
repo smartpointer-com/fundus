@@ -1,6 +1,6 @@
 # Build/dev tasks — run from the HOST.
 #
-# The Fundus orchestrator is a host-side Python venv; only the services
+# The Fundus orchestrator is a host-side Python app; only the services
 # (Meilisearch + extraction engines) run in containers, reached over HTTP and
 # managed here via `docker compose`. There is no dev container: lint/test/format
 # run against the venv on the host; up/down manage the service containers.
@@ -9,9 +9,18 @@ VENV    ?= .venv
 PY      := $(VENV)/bin/python
 COMPOSE ?= docker compose -f docker/compose.yml
 
-.PHONY: install fmt lint test up down
+# Prefer the dev venv's CLI; fall back to a `fundus` installed on PATH (via `make install`).
+FUNDUS := $(shell [ -x $(VENV)/bin/fundus ] && echo $(VENV)/bin/fundus || echo fundus)
+# Where Meilisearch persists its index: resolved from the user's config (single data root),
+# falling back to the compose default if Fundus isn't set up yet.
+MEILI_DATA := $(shell $(FUNDUS) paths --meili-data 2>/dev/null || echo ./data/meili)
 
-install:
+.PHONY: install dev fmt lint test up down
+
+install:  ## Install the `fundus` CLI for use (isolated, survives deleting this repo).
+	pipx install .        # or: python3 -m pip install --user .
+
+dev:  ## Set up the editable dev environment in ./$(VENV).
 	python3 -m venv $(VENV)
 	$(PY) -m pip install --upgrade pip
 	$(PY) -m pip install -e ".[dev]"
@@ -27,7 +36,7 @@ test:
 	$(VENV)/bin/pytest
 
 up:
-	$(COMPOSE) up -d
+	FUNDUS_MEILI_DATA="$(MEILI_DATA)" $(COMPOSE) up -d
 
 down:
-	$(COMPOSE) down
+	FUNDUS_MEILI_DATA="$(MEILI_DATA)" $(COMPOSE) down

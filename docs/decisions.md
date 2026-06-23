@@ -55,11 +55,18 @@ The search engine and extraction engines containerize cleanly. The embedding
 model needs GPU access (unavailable to containers on macOS), so it runs
 bare-metal and is reached over HTTP — the one component outside Docker.
 
-## 8. Deterministic ids + upsert; deletions reconciled separately
+## 8. Deterministic ids + upsert; `--full` reconciles against reality
 
-Ids are `hash(source, native_id, chunk_seq)`, so re-indexing is idempotent.
-Incremental runs cannot reliably observe deletions, so a periodic `--full` pass
-reconciles by set-difference against each source's currently-live ids.
+Ids are `hash(source, native_id, chunk_seq)`, so re-indexing is idempotent
+(re-reads overwrite, never duplicate). A forward-only cursor can't observe what
+happens out of band — deletions, or an in-place edit whose mtime regressed — so a
+periodic `--full` pass reconciles. For **append-only stores** (mail, chat) that
+means set-difference deletion against the currently-live ids. For **file trees**
+it means an rsync-style content reconcile: diff every live file's `(size, mtime)`
+fingerprint against the indexed manifest and re-index whatever changed. Size +
+mtime (not a content hash) is enough — a real edit moves one or both — and avoids
+re-reading every byte of the corpus on each pass. The fingerprint rides as a
+stored, non-filterable field, so it needs no index-settings change.
 
 ## 9. Per-source cursors in a lock-guarded JSON state file
 

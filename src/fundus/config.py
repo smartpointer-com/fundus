@@ -80,10 +80,31 @@ class SourceConfig(BaseModel):
     type: str
 
 
+class ServiceConfig(BaseModel):
+    # Defaults for `fundus service` (launchd jobs). Each is overridable by an install-time flag.
+    # label_prefix yields the two job labels <prefix>.index and <prefix>.index-full; use your own
+    # reverse-DNS convention (e.g. com.you.fundus). env_file, if set, is sourced by the job wrapper
+    # at runtime so secrets (FUNDUS_MEILI_KEY, ...) never live in the world-readable plist.
+    label_prefix: str = "fundus"
+    interval_minutes: int = 30  # incremental cadence
+    full_at: str = "03:00"  # nightly full-reconcile wall-clock time (HH:MM)
+    env_file: str | None = None
+
+
+class StorageConfig(BaseModel):
+    # Single root for ALL Fundus runtime data: the search index, the SQLite caches, the per-source
+    # cursors, and the run lock — each in its own subdirectory. Unset → $XDG_DATA_HOME/fundus
+    # (~/.local/share/fundus). The Meilisearch index lives at <data_dir>/meili and is a Docker
+    # volume, so the stack mounts it separately (`make up` reads `fundus paths --meili-data`).
+    data_dir: str | None = None
+
+
 class FundusConfig(BaseModel):
     meilisearch: MeiliConfig = Field(default_factory=MeiliConfig)
     embedder: EmbedderConfig = Field(default_factory=EmbedderConfig)
     extractor: ExtractorConfig = Field(default_factory=ExtractorConfig)
+    storage: StorageConfig = Field(default_factory=StorageConfig)
+    service: ServiceConfig = Field(default_factory=ServiceConfig)
     # Corpus locales: used for localizedAttributes and as default OCR languages.
     locales: list[str] = Field(default_factory=lambda: ["eng"])
     # Indexing concurrency: a thread pool issues extraction requests in parallel so the
@@ -92,8 +113,36 @@ class FundusConfig(BaseModel):
     workers: int = Field(default_factory=lambda: min(8, os.cpu_count() or 4))
     sources: list[SourceConfig] = Field(default_factory=list)
 
+    # --- Resolved data locations (all under one root; see StorageConfig) ---
 
-# --- Paths (XDG) ---------------------------------------------------------------
+    def data_root(self) -> Path:
+        d = self.storage.data_dir
+        return Path(d).expanduser() if d else _data_home()
+
+    def meili_dir(self) -> Path:
+        """Where the Meilisearch index should live (mounted into the container as a Docker volume)."""
+        return self.data_root() / "meili"
+
+    def extraction_cache_path(self) -> Path:
+        return self.data_root() / "cache" / "extractions.db"
+
+    def embed_cache_path(self) -> Path:
+        return self.data_root() / "cache" / "embeddings.db"
+
+    def cursors_path(self) -> Path:
+        return self.data_root() / "state" / "cursors.json"
+
+    def lock_path(self) -> Path:
+        return self.data_root() / "state" / "fundus.lock"
+
+    def logs_dir(self) -> Path:
+        """Where the launchd index jobs write their stdout/stderr logs."""
+        return self.data_root() / "logs"
+
+
+# --- Paths ---------------------------------------------------------------------
+# Config follows XDG_CONFIG_HOME; all runtime DATA is consolidated under one root
+# (see FundusConfig.data_root and StorageConfig), defaulting to XDG_DATA_HOME.
 
 
 def default_config_path() -> Path:
@@ -101,30 +150,9 @@ def default_config_path() -> Path:
     return Path(base) / "fundus.toml"
 
 
-def _state_home() -> Path:
-    base = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
+def _data_home() -> Path:
+    base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
     return Path(base) / "fundus"
-
-
-def default_state_path() -> Path:
-    return _state_home() / "cursors.json"
-
-
-def default_lock_path() -> Path:
-    return _state_home() / "fundus.lock"
-
-
-def _cache_home() -> Path:
-    base = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
-    return Path(base) / "fundus"
-
-
-def default_cache_path() -> Path:
-    return _cache_home() / "extractions.db"
-
-
-def default_embed_cache_path() -> Path:
-    return _cache_home() / "embeddings.db"
 
 
 def load_config(path: str | Path | None = None) -> FundusConfig:

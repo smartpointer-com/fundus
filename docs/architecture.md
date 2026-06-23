@@ -42,7 +42,8 @@ for agents. It is organized around two plugin families — **sources** and
 
 ```
 src/fundus/
-  cli.py            Typer app: init | index | query | serve | sources | embed-backfill | bakeoff
+  cli.py            Typer app: init | index | query | serve | sources | paths | service | embed-backfill | bakeoff
+  service/          launchd job generation + management for periodic indexing
   config.py         configuration model + loader (TOML + env)
   models.py         domain models (SourceItem, ExtractionResult/Block, Chunk, IndexDocument)
   log.py            structured logging
@@ -100,8 +101,10 @@ for item in source.changed(cursor):
 state.set_cursor(source.name, source.current_cursor())   # atomic
 ```
 
-A `--full` run additionally reconciles deletions:
-`reconcile.delete_missing(source, set(source.live_ids()))`.
+A `--full` run additionally reconciles the index against reality (see
+[Incremental indexing & deletions](#incremental-indexing--deletions) below):
+deletions for every source, and for **file-tree sources** a full content
+reconcile that also re-indexes edits the cursor cannot see.
 
 Flags: `--only <source>`, `--full`, `--force`, plus an exit-early option for
 cheap iteration. A global lock prevents concurrent runs.
@@ -187,11 +190,62 @@ embedder). Granularity differs per item kind, all consuming normalized `blocks`:
 
 ## Incremental indexing & deletions
 
-Per-source **cursors** (a notmuch lastmod, a max rowid/timestamp, an mtime
-window) are persisted in an atomic, lock-guarded JSON state file. Incremental
-runs **upsert only**; deletions are reconciled on `--full` by set-difference
-against the source's currently-live ids — incremental windows cannot reliably
-observe deletes.
+The plain `fundus index` is **incremental**. Per-source **cursors** (a notmuch
+lastmod, a max rowid/timestamp, an mtime watermark) are persisted in an atomic,
+lock-guarded JSON state file and bound *what is read*: `source.changed(cursor)`
+yields only items new or modified since the last run, so an unchanged email or
+file is never re-read. `--force` ignores the cursor and re-reads the whole corpus.
+
+**No duplicates.** Document ids are content-free and deterministic
+(`hash(source, native_id, chunk_seq)`), so when an item *is* re-read — because it
+changed, under `--force`, or during a `--full` reconcile — it produces the same
+ids and the upsert **overwrites** rather than appends. Combined with the cursor
+(unchanged items aren't read at all), indexing is idempotent: the same file or
+email is never indexed twice.
+
+`--full` **reconciles the index against reality** — the part a forward-only cursor
+structurally cannot do, since a deleted or out-of-band-edited artifact leaves no
+record for an incremental walk to observe. Two regimes, by source kind:
+
+- **Append-only stores (mail, chat).** Their artifacts are immutable, so only
+  additions (handled by the cursor) and deletions occur. `--full` reconciles
+  deletions by **set-difference**: read the `parent_id`s currently indexed for the
+  source, subtract the source's currently-live ids (`indexed − live = dead`), and
+  remove anything no longer live.
+- **File trees (the `files` source).** A file can be edited in place, and its
+  mtime is only as trustworthy as whatever wrote it (a Drive/Docs export may sync
+  an edit with a *regressed* or unchanged mtime — invisible to the cursor). So
+  `--full` does an **rsync-style content reconcile**: read every live file's
+  `(size, mtime)` fingerprint, fetch the indexed manifest of the same, and diff.
+  New or fingerprint-changed files are re-indexed; files absent from disk are
+  deleted. This is independent of the cursor, so an edit is caught regardless of
+  what its mtime did. A re-indexed file's old chunks are cleared first, so a file
+  that re-chunks into fewer pieces can't leave orphaned chunks behind.
+
+The fingerprint (`size`, `mtime`) is a stored, non-filterable field on each
+document — adding it triggers no index-settings change, and documents indexed
+before it existed simply read as "absent from the manifest" and get re-indexed
+once.
+
+## Periodic indexing (`fundus service`)
+
+On macOS, `fundus service install` generates and bootstraps two launchd jobs:
+`<prefix>.index` (incremental, every N minutes, `StartInterval` + `RunAtLoad`) and
+`<prefix>.index-full` (the nightly full reconcile, `StartCalendarInterval` at a
+wall-clock hour). The run-lock makes the two safe to overlap — an incremental that
+fires mid-full simply skips.
+
+- **LaunchAgent (default)** runs in the login session; **`--daemon`** installs a
+  LaunchDaemon (via `sudo`) that runs headless at boot — correct only when the
+  services it needs (the container stack, the embedder) are themselves up without a
+  login. A daemon still runs as the invoking user, not root.
+- **Points at the *installed* binary.** `install` refuses to wire up an editable
+  dev build (it would break on any source change); run `make install` first, then
+  invoke the installed CLI. Secrets are never written into the (world-readable)
+  plist — the job wrapper sources an optional `env_file` at runtime.
+- Logs go to `<data_root>/logs/`; `status`, `restart`, and `run` (trigger now)
+  round out the subcommands. The pure plist generation lives in `service/spec.py`,
+  the launchctl/sudo side effects in `service/manager.py`.
 
 ## Dependencies
 
@@ -216,6 +270,14 @@ A single TOML file (`$XDG_CONFIG_HOME/fundus.toml` or `~/.config/fundus.toml`),
 env-overridable, with a value-with-env-fallback convention for secrets. See
 [`config/fundus.example.toml`](../config/fundus.example.toml). Every source and
 path is supplied here — the toolkit ships with no built-in locations.
+
+**Data layout.** All runtime data lives under one root — `[storage].data_dir`,
+defaulting to `$XDG_DATA_HOME/fundus` — in named subdirectories: `meili/` (the
+search index, mounted into the container), `cache/` (extraction + vector SQLite
+caches), and `state/` (per-source cursors and the run lock). `fundus paths` prints
+the resolved locations; `make up` reads `fundus paths --meili-data` to mount the
+index, so the config is the single source of truth for where data lives. Only the
+config file itself follows `XDG_CONFIG_HOME` independently.
 
 ## Deployment & security
 

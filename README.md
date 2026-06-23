@@ -37,13 +37,35 @@ machine-specific setup notes.
 ## Quick start
 
 ```bash
-make install                       # set up the Python environment
-cp config/fundus.example.toml ~/.config/fundus.toml   # then edit paths
-make up                            # start Meilisearch + extraction engines
+make install                       # install the `fundus` CLI (isolated; survives deleting this repo)
+cp config/fundus.example.toml ~/.config/fundus.toml   # then edit paths (and optionally [storage].data_dir)
+make up                            # start Meilisearch + extraction engines (mounts your data root)
 fundus init                        # apply index settings
 fundus index                       # ingest (incremental)
 fundus serve                       # expose read-only search over MCP
 ```
+
+All runtime data (the search index, caches, cursors) lives under one root — by
+default `$XDG_DATA_HOME/fundus`, overridable via `[storage].data_dir` in the
+config. Run `fundus paths` to see the resolved locations. `make up`/`make down`
+manage the service stack from this repo.
+
+## Scheduling (macOS)
+
+`fundus service install` sets up two launchd jobs — incremental (every 30 min) and
+a nightly full reconcile — pointing at the installed CLI:
+
+```bash
+make install                       # the service must point at an installed binary, not the dev venv
+fundus service install             # LaunchAgent (login session); --daemon for a headless LaunchDaemon
+fundus service status              # state, last exit, run count
+fundus service run                 # trigger an incremental run now (test without waiting)
+fundus service uninstall
+```
+
+Flags `--interval`, `--full-at HH:MM`, `--label-prefix`, and `--env-file` (or the
+`[service]` config block) tune it. Set `--full-at` *after* whatever syncs your
+corpus to disk. Logs land in `<data_root>/logs/`.
 
 ## Local deployment notes
 
@@ -65,11 +87,14 @@ build phases and the [decision record](docs/decisions.md) for rationale.
 ## Development
 
 ```bash
-make install   # create the environment and install dev dependencies
+make dev       # create the editable dev environment in ./.venv
 make lint      # ruff + mypy
 make test      # pytest
 make up        # start Meilisearch + extraction engines (Docker)
 ```
+
+(`make install` is the *user* install — it puts the `fundus` CLI on your PATH via
+`pipx`, independent of this tree. Contributors want `make dev`.)
 
 ## License
 

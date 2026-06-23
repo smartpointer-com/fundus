@@ -13,7 +13,7 @@ from fundus.embed.config import DEFAULT_EMBEDDER
 from fundus.index.base import IndexSettings
 from fundus.index.query import group_by_parent, hybrid_search_params
 from fundus.index.settings import build_index_settings
-from fundus.models import IndexDocument
+from fundus.models import FileStat, IndexDocument
 
 
 class MeiliSink:
@@ -42,6 +42,7 @@ class MeiliSink:
         self._embedder_name = embedder_name
         self._batch_size = batch_size
         self._query_embedder = query_embedder
+        self._fingerprint_page = 10_000  # manifest fetch page size
 
     @property
     def _index(self) -> Any:
@@ -80,12 +81,48 @@ class MeiliSink:
         dist = (res.get("facetDistribution") or {}).get("source") or {}
         return {str(k): int(v) for k, v in dist.items()}
 
+    def delete_parents(self, parent_ids: set[str]) -> int:
+        """Delete every document under the given parent ids (filter-delete, batched).
+
+        Batched because a `--full` run that re-indexes many files (e.g. the first pass after adding
+        the fingerprint fields) would otherwise build one enormous `parent_id IN [...]` filter.
+        """
+        ids = sorted(parent_ids)
+        for start in range(0, len(ids), 500):
+            quoted = ", ".join(f'"{p}"' for p in ids[start : start + 500])
+            self._index.delete_documents(filter=f"parent_id IN [{quoted}]")
+        return len(ids)
+
     def delete_missing(self, source: str, live_parent_ids: set[str]) -> int:
-        dead = self._indexed_parent_ids(source) - live_parent_ids
-        if dead:
-            quoted = ", ".join(f'"{p}"' for p in sorted(dead))
-            self._index.delete_documents_by_filter(f"parent_id IN [{quoted}]")
-        return len(dead)
+        return self.delete_parents(self._indexed_parent_ids(source) - live_parent_ids)
+
+    def indexed_fingerprints(self, source: str) -> dict[str, FileStat]:
+        """The indexed file manifest for a source: ``native_id -> (size, mtime)``.
+
+        One row per file is enough (all chunks of a file share the fingerprint), so we
+        dedupe by ``native_id``. Documents predating the fingerprint fields (size 0) are
+        omitted, so they read as "not indexed" and get re-indexed once — self-healing.
+        """
+        out: dict[str, FileStat] = {}
+        offset, limit = 0, self._fingerprint_page
+        while True:
+            res = self._index.get_documents(
+                {
+                    "filter": f'source = "{source}"',
+                    "fields": ["native_id", "size", "mtime"],
+                    "limit": limit,
+                    "offset": offset,
+                }
+            )
+            rows = list(res.results)
+            for row in rows:
+                rec = row if isinstance(row, dict) else dict(row)
+                nid, size = rec.get("native_id"), rec.get("size")
+                if nid and isinstance(size, int) and size > 0:
+                    out[str(nid)] = FileStat(size, float(rec.get("mtime") or 0.0))
+            if len(rows) < limit:
+                return out
+            offset += limit
 
     def search(
         self,

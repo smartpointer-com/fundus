@@ -1,4 +1,6 @@
-from fundus.config import default_config_path, load_config
+from pathlib import Path
+
+from fundus.config import FundusConfig, default_config_path, load_config
 
 
 def test_load_config(tmp_path, monkeypatch):
@@ -41,3 +43,28 @@ def test_load_config_missing_file_defaults(tmp_path):
 def test_default_config_path_xdg(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     assert default_config_path() == tmp_path / "fundus.toml"
+
+
+def test_data_root_defaults_to_xdg_data_home(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    cfg = FundusConfig()
+    assert cfg.data_root() == tmp_path / "fundus"
+    # everything is consolidated under the one root, in named subdirs
+    assert cfg.meili_dir() == tmp_path / "fundus" / "meili"
+    assert cfg.extraction_cache_path() == tmp_path / "fundus" / "cache" / "extractions.db"
+    assert cfg.embed_cache_path() == tmp_path / "fundus" / "cache" / "embeddings.db"
+    assert cfg.cursors_path() == tmp_path / "fundus" / "state" / "cursors.json"
+    assert cfg.lock_path() == tmp_path / "fundus" / "state" / "fundus.lock"
+
+
+def test_data_dir_overrides_root_and_expands_user(tmp_path):
+    cfg = FundusConfig.model_validate({"storage": {"data_dir": "~/myfundus"}})
+    assert cfg.data_root() == Path.home() / "myfundus"
+    assert cfg.meili_dir() == Path.home() / "myfundus" / "meili"
+
+
+def test_data_dir_from_loaded_config(tmp_path):
+    f = tmp_path / "fundus.toml"
+    f.write_text(f'[storage]\ndata_dir = "{tmp_path / "store"}"\n')
+    cfg = load_config(f)
+    assert cfg.data_root() == tmp_path / "store"

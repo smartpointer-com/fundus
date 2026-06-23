@@ -21,7 +21,10 @@ services:
     ports:
       - "127.0.0.1:7700:7700"
     volumes:
-      - ./data/meili:/meili_data
+      # Host path for the index. `make up` sets FUNDUS_MEILI_DATA from your config's data root
+      # (default $XDG_DATA_HOME/fundus/meili); the ./data/meili fallback is only for a bare
+      # `docker compose up` outside the Makefile. Keep the index OUT of the repo in real use.
+      - ${FUNDUS_MEILI_DATA:-./data/meili}:/meili_data
 
   # Primary extraction engine (best PDF layout/table fidelity).
   docling-serve:

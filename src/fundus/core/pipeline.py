@@ -10,19 +10,16 @@ reconcile deletions.
 from __future__ import annotations
 
 import time
+from collections.abc import Iterable
 
 import httpx
 import structlog
 
 from fundus.chunk.dispatch import chunker_for, is_tabular
-from fundus.config import (
-    FundusConfig,
-    default_cache_path,
-    default_embed_cache_path,
-    default_state_path,
-)
+from fundus.config import FundusConfig
+from fundus.core.ids import parent_id
 from fundus.core.parallel import parallel_map
-from fundus.core.reconcile import live_parent_ids
+from fundus.core.reconcile import diff_tree, live_parent_ids
 from fundus.core.state import JsonStateStore, StateStore
 from fundus.embed.cache import SqliteEmbeddingCache, embed_input_text
 from fundus.embed.client import EmbeddingClient
@@ -43,7 +40,7 @@ from fundus.models import (
     TextPayload,
     payload_bytes,
 )
-from fundus.sources.base import Source
+from fundus.sources.base import Source, TreeSource
 from fundus.sources.registry import build_source
 
 log = structlog.get_logger("fundus.pipeline")
@@ -178,12 +175,12 @@ class Pipeline:
                 return []
         return []  # unreachable; satisfies the type checker
 
-    def index_source(self, source: Source, *, full: bool = False, force: bool = False) -> int:
-        cursor = None if force else self._state.get_cursor(source.name)
+    def _drain(self, items: Iterable[SourceItem]) -> int:
+        """Process items through the worker pool, batching upserts; return chunks written."""
         batch: list[IndexDocument] = []
         total = 0
         # Workers extract + chunk concurrently; the main thread batches the upserts.
-        for docs in parallel_map(source.changed(cursor), self._process_item, workers=self._workers):
+        for docs in parallel_map(items, self._process_item, workers=self._workers):
             batch.extend(docs)
             total += len(docs)
             if len(batch) >= self._batch:
@@ -191,11 +188,42 @@ class Pipeline:
                 batch = []
         if batch:
             self._sink.upsert(batch)
+        return total
+
+    def index_source(self, source: Source, *, full: bool = False, force: bool = False) -> int:
+        # A full pass on a file tree reconciles by content fingerprint, not the mtime cursor.
+        if full and isinstance(source, TreeSource):
+            return self._reconcile_tree(source)
+        cursor = None if force else self._state.get_cursor(source.name)
+        total = self._drain(source.changed(cursor))
         self._state.set_cursor(source.name, source.current_cursor())
         if full:
             removed = self._sink.delete_missing(source.name, live_parent_ids(source))
             log.info("reconciled", source=source.name, removed=removed)
         log.info("indexed", source=source.name, chunks=total)
+        return total
+
+    def _reconcile_tree(self, source: TreeSource) -> int:
+        """Rsync-style ``--full`` for a file tree: diff the live tree's fingerprints against the
+        indexed manifest, re-index new/edited files and drop removed ones — independent of the
+        mtime cursor, so an edit is caught even if its mtime regressed or never moved."""
+        disk = dict(source.fingerprints())
+        indexed = self._sink.indexed_fingerprints(source.name)
+        changed, removed = diff_tree(disk, indexed)
+        # Clear changed parents too (not just removed): a file that re-chunks into fewer pieces
+        # would otherwise leave orphaned high-seq chunks behind under the same parent id.
+        dead = {parent_id(source.name, nid) for nid in changed | removed}
+        self._sink.delete_parents(dead)
+        items = (item for nid in changed if (item := source.load(nid)) is not None)
+        total = self._drain(items)
+        self._state.set_cursor(source.name, source.current_cursor())
+        log.info(
+            "reconciled",
+            source=source.name,
+            reindexed=len(changed),
+            removed=len(removed),
+            chunks=total,
+        )
         return total
 
 
@@ -242,13 +270,13 @@ def build_pipeline(
             query_prompt="",
             timeout=180.0,
         )
-        embed_cache = SqliteEmbeddingCache(str(default_embed_cache_path()), config.embedder.model)
+        embed_cache = SqliteEmbeddingCache(str(config.embed_cache_path()), config.embedder.model)
     return Pipeline(
         config,
         sink or build_sink(config),
         build_extractor(config.extractor.default, config.extractor),
-        SqliteExtractionCache(cache_path or str(default_cache_path())),
-        JsonStateStore(state_path or str(default_state_path())),
+        SqliteExtractionCache(cache_path or str(config.extraction_cache_path())),
+        JsonStateStore(state_path or str(config.cursors_path())),
         ocr_languages=list(config.locales),
         workers=config.workers,
         doc_embedder=doc_embedder,

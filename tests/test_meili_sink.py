@@ -1,15 +1,19 @@
+from types import SimpleNamespace
+
 from fundus.index.base import IndexSettings
 from fundus.index.meili import MeiliSink
-from fundus.models import IndexDocument
+from fundus.models import FileStat, IndexDocument
 
 
 class FakeIndex:
-    def __init__(self, search_response=None):
+    def __init__(self, search_response=None, documents=None):
         self.settings = None
         self.added: list[list[dict]] = []
         self.deleted: list[str] = []
         self.last_params: dict | None = None
+        self.doc_queries: list[dict] = []
         self._resp = search_response or {}
+        self._documents = documents or []  # rows returned by get_documents
 
     def update_settings(self, payload):
         self.settings = payload
@@ -19,13 +23,19 @@ class FakeIndex:
         self.added.append(list(docs))
         return {"taskUid": 1}
 
-    def delete_documents_by_filter(self, flt):
-        self.deleted.append(flt)
+    def delete_documents(self, ids=None, *, filter=None):  # mirrors the real client's signature
+        self.deleted.append(filter)
         return {"taskUid": 1}
 
     def search(self, query, params=None):
         self.last_params = params
         return self._resp
+
+    def get_documents(self, params=None):
+        self.doc_queries.append(params or {})
+        offset = (params or {}).get("offset", 0)
+        limit = (params or {}).get("limit", 20)
+        return SimpleNamespace(results=self._documents[offset : offset + limit])
 
 
 class FakeClient:
@@ -91,6 +101,48 @@ def test_delete_missing():
     assert n == 2
     assert idx.deleted and "parent_id IN" in idx.deleted[0]
     assert '"p1"' in idx.deleted[0] and '"p3"' in idx.deleted[0]
+
+
+def test_sink_only_calls_methods_the_real_client_has():
+    # Guards against the FakeIndex drifting from meilisearch's real API (which once hid a call to a
+    # non-existent `delete_documents_by_filter`). Every Index method the sink relies on must exist
+    # on both the real client and the fake.
+    from meilisearch.index import Index
+
+    for method in ("add_documents", "delete_documents", "get_documents", "search", "update_settings"):
+        assert hasattr(Index, method), f"real client lost {method}"
+        assert hasattr(FakeIndex, method), f"fake missing {method}"
+
+
+def test_delete_parents_noop_on_empty():
+    idx = FakeIndex()
+    sink = MeiliSink(index="c", client=FakeClient(idx))
+    assert sink.delete_parents(set()) == 0
+    assert idx.deleted == []  # no filter-delete issued for an empty set
+
+
+def test_indexed_fingerprints_dedupes_and_skips_unfingerprinted():
+    docs = [
+        {"native_id": "a", "size": 10, "mtime": 100.5},
+        {"native_id": "a", "size": 10, "mtime": 100.5},  # another chunk of the same file
+        {"native_id": "b", "size": 20, "mtime": 200.0},
+        {"native_id": "c", "size": 0, "mtime": 0.0},  # legacy doc without a fingerprint -> skipped
+    ]
+    idx = FakeIndex(documents=docs)
+    sink = MeiliSink(index="c", client=FakeClient(idx))
+    manifest = sink.indexed_fingerprints("docs")
+    assert manifest == {"a": FileStat(10, 100.5), "b": FileStat(20, 200.0)}
+    assert idx.doc_queries[0]["filter"] == 'source = "docs"'
+
+
+def test_indexed_fingerprints_paginates():
+    docs = [{"native_id": f"f{i}", "size": 1, "mtime": float(i)} for i in range(25)]
+    idx = FakeIndex(documents=docs)
+    sink = MeiliSink(index="c", client=FakeClient(idx))
+    sink._fingerprint_page = 10  # small page size to force pagination
+    manifest = sink.indexed_fingerprints("docs")
+    assert len(manifest) == 25
+    assert len(idx.doc_queries) == 3  # 10 + 10 + 5
 
 
 def test_search_groups_by_parent():

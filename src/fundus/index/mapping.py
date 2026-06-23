@@ -32,4 +32,6 @@ def to_index_document(item: SourceItem, chunk: Chunk) -> IndexDocument:
         mime=item.mime_type,
         lang=lang if isinstance(lang, list) else [],
         msg_ids=msg_ids,
+        size=item.size or 0,
+        mtime=item.mtime or 0.0,
     )

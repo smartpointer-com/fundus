@@ -13,15 +13,18 @@ from fundus.models import (
     DocMeta,
     EngineRef,
     ExtractionResult,
+    FileStat,
     SourceItem,
     TextPayload,
 )
 
 
 class FakeSink:
-    def __init__(self):
+    def __init__(self, fingerprints=None):
         self.docs = []
         self.deleted = []
+        self.deleted_parents = []
+        self._fingerprints = fingerprints or {}
 
     def ensure_schema(self, settings):
         pass
@@ -32,6 +35,13 @@ class FakeSink:
     def delete_missing(self, source, live):
         self.deleted.append((source, set(live)))
         return len(live)
+
+    def delete_parents(self, parent_ids):
+        self.deleted_parents.append(set(parent_ids))
+        return len(parent_ids)
+
+    def indexed_fingerprints(self, source):
+        return dict(self._fingerprints)
 
 
 class FakeExtractor:
@@ -296,3 +306,65 @@ def test_process_item_does_not_retry_permanent_failure():
     )
     n = pipeline.index_source(FakeSource("docs", [item]))
     assert n == 0 and ex.calls == 1  # definitive 504: tried once, not retried
+
+
+class FakeTreeSource:
+    """A file-tree source whose contents are held in memory (satisfies TreeSource)."""
+
+    type = "files"
+
+    def __init__(self, name, files):
+        self.name = name  # files: native_id -> (FileStat, bytes)
+        self._files = files
+
+    def changed(self, cursor):
+        return iter([])
+
+    def live_ids(self):
+        return iter(self._files)
+
+    def current_cursor(self):
+        return "C1"
+
+    def fingerprints(self):
+        for nid, (stat, _data) in self._files.items():
+            yield nid, stat
+
+    def load(self, native_id):
+        stat, data = self._files[native_id]
+        return SourceItem(
+            source=self.name, type="files", native_id=native_id, item_kind="file",
+            title=native_id, path=native_id, mime_type="text/plain",
+            size=stat.size, mtime=stat.mtime, ts=datetime(2024, 1, 1),
+            payload=BlobPayload(data=data),
+        )
+
+
+def test_full_tree_reconcile_reindexes_changed_and_drops_removed():
+    # Indexed: a + b. On disk: a edited (size/mtime differ), c new, b gone.
+    indexed = {"a": FileStat(2, 100.0), "b": FileStat(2, 100.0)}
+    disk = {"a": (FileStat(3, 200.0), b"aaa"), "c": (FileStat(2, 100.0), b"cc")}
+    sink = FakeSink(fingerprints=indexed)
+    src = FakeTreeSource("docs", disk)
+    n = Pipeline(FundusConfig(), sink, FakeExtractor(), DictCache(), DictState(), batch_size=10).index_source(
+        src, full=True
+    )
+    reindexed = {d.native_id for d in sink.docs}
+    assert reindexed == {"a", "c"}  # edited + new re-indexed; unchanged 'b' not touched
+    assert n == len(sink.docs)
+    # Parents cleared = changed (a, c) ∪ removed (b), so stale chunks (incl. re-chunk orphans) go.
+    assert sink.deleted_parents and sink.deleted_parents[0] == {
+        parent_id("docs", nid) for nid in ("a", "b", "c")
+    }
+    assert sink.deleted == []  # tree path uses delete_parents, not the set-difference path
+
+
+def test_full_tree_reconcile_skips_unchanged():
+    indexed = {"a": FileStat(2, 100.0)}
+    disk = {"a": (FileStat(2, 100.0), b"aa")}  # identical fingerprint
+    sink = FakeSink(fingerprints=indexed)
+    n = Pipeline(FundusConfig(), sink, FakeExtractor(), DictCache(), DictState()).index_source(
+        FakeTreeSource("docs", disk), full=True
+    )
+    assert n == 0 and sink.docs == []  # nothing re-read or re-indexed
+    assert sink.deleted_parents == [set()]  # no parents to clear

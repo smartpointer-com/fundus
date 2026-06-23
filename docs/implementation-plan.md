@@ -34,8 +34,10 @@ email/WhatsApp document attachments.
   Tabular files (`text/csv`, spreadsheets) go straight to the tabular chunker.
 - **`locales`** is a single top-level config setting driving both the index's
   `localizedAttributes` and the default OCR languages.
-- **Paths** follow XDG: config at `~/.config/fundus.toml`, cursors under
-  `$XDG_STATE_HOME/fundus/`, extraction cache under `$XDG_CACHE_HOME/fundus/`.
+- **Paths**: the config file follows `XDG_CONFIG_HOME` (`~/.config/fundus.toml`),
+  but all runtime data is consolidated under one configurable root
+  (`[storage].data_dir`, default `$XDG_DATA_HOME/fundus`): `meili/`, `cache/`,
+  `state/`. `fundus paths` reports the resolved locations.
 
 ## Phases (reference)
 
@@ -44,7 +46,8 @@ email/WhatsApp document attachments.
   cache, Markdown/text→Block normalizer, bake-off runner.
 - **2 — Chunking:** structure-aware text, chat windows, tabular; dispatch.
 - **3 — Index sink:** Meili settings, REST embedder, batched upsert,
-  set-difference deletion, hybrid query grouped by parent.
+  reconciliation (set-difference deletion + rsync-style file-tree content diff),
+  hybrid query grouped by parent.
 - **4 — Sources:** files, notmuch (CLI JSON), wacli (configurable schema); registry.
 - **5 — Pipeline:** routing + chunking + upsert, per-source cursors, `--full`
   reconcile, run lock, config loader, CLI.

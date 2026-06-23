@@ -1,6 +1,19 @@
 # Fundus configuration (TOML). Copy to ~/.config/fundus.toml and edit.
 # Every path below is an EXAMPLE — point them at your own corpus locations.
 
+# [service]                # defaults for `fundus service install` (launchd jobs); each is also a flag
+# label_prefix = "fundus"  # job labels become <prefix>.index and <prefix>.index-full (use reverse-DNS)
+# interval_minutes = 30    # incremental indexing cadence
+# full_at = "03:00"        # nightly full-reconcile time (HH:MM); set it AFTER your corpus sync finishes
+# env_file = "~/.secrets/fundus.env"   # sourced at runtime for secrets; never written into the plist
+
+# [storage]
+# data_dir = "~/fundus"    # single root for ALL Fundus runtime data — the search index, the
+#                          # extraction/embedding caches, the per-source cursors, and the run lock,
+#                          # each in a subdirectory. Default: $XDG_DATA_HOME/fundus
+#                          # (~/.local/share/fundus). The Meili index lives at <data_dir>/meili;
+#                          # `make up` mounts it automatically (see `fundus paths`).
+
 [meilisearch]
 url   = "http://127.0.0.1:7700"
 index = "corpus"

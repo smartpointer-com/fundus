@@ -118,8 +118,8 @@ class WacliSource:
         attachment — routed through the binary-extraction pipeline. Images/video/audio are skipped
         (media_type filter), and only messages whose media was downloaded locally are emitted.
 
-        Like live_ids (chats only), these per-message file ids aren't enumerated for --full
-        reconciliation; incremental/--force runs (the norm) are unaffected.
+        These per-message file ids are also enumerated by live_ids, so a --full reconcile keeps
+        live shared documents and prunes those whose message or local file is gone.
         """
         rows = conn.execute(
             f"SELECT {self._id}, {self._ts}, {self._sender}, {self._filename_col}, "
@@ -177,10 +177,22 @@ class WacliSource:
         )
 
     def live_ids(self) -> Iterator[str]:
+        """Chat jids plus the msg_ids of shared documents present locally (matching what
+        ``_media_items`` indexes), so a ``--full`` reconcile doesn't prune live media."""
         conn = self._connect()
         try:
             for r in conn.execute(f"SELECT DISTINCT {self._chat} FROM {self._t}"):
                 yield str(r[0])
+            if self._media:
+                rows = conn.execute(
+                    f"SELECT {self._id}, {self._path_col} FROM {self._t} "
+                    f"WHERE {self._media_type_col} = ? AND {self._path_col} IS NOT NULL"
+                    f"{self._and_where()}",
+                    (self._document_media_type,),
+                )
+                for msg_id, local_path in rows:
+                    if self._resolve_media_path(str(local_path)) is not None:
+                        yield str(msg_id)
         finally:
             conn.close()
 

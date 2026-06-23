@@ -121,8 +121,16 @@ def test_notmuch_attachment_fetch_failure_is_skipped():
     assert [i.item_kind for i in src.changed(None)] == ["email"]
 
 
-def test_notmuch_live_ids():
-    assert list(NotmuchSource("mail", runner=_runner).live_ids()) == ["m1", "m2"]
+def test_notmuch_live_ids_messages_only_when_attachments_off():
+    # cheap search path: just message ids
+    src = NotmuchSource("mail", runner=_runner, attachments=False)
+    assert list(src.live_ids()) == ["m1", "m2"]
+
+
+def test_notmuch_live_ids_includes_attachment_part_ids():
+    # attachments on: live_ids must enumerate <msgid>#<part> so a --full reconcile keeps them
+    src = NotmuchSource("mail", runner=_attach_runner)
+    assert list(src.live_ids()) == ["m1", "m1#3"]  # message + its PDF part; inline image skipped
 
 
 def test_message_body_html_fallback():

@@ -202,14 +202,24 @@ class NotmuchSource:
             )
 
     def live_ids(self) -> Iterator[str]:
-        # Enumerates message ids only, not attachment parts (<msgid>#<part>). A --full reconcile
-        # would treat attachment docs as orphaned and prune them; incremental/--force runs (the
-        # norm) are unaffected. Walk parts here if --full reconciliation is ever enabled.
-        out = self._run(["search", "--output=messages", self._query])
-        for line in out.splitlines():
-            line = line.strip()
-            if line:
-                yield line[3:] if line.startswith("id:") else line
+        """Every live native_id: message ids, plus attachment part ids (``<msgid>#<part>``) when
+        attachments are indexed — so a ``--full`` reconcile keeps live attachments and prunes only
+        those of deleted mail. Enumerating parts needs a full ``show`` (notmuch emits part structure
+        only with ``--body=true``); the cheap message-id search suffices when attachments are off.
+        """
+        if not self._attachments:
+            out = self._run(["search", "--output=messages", self._query])
+            for line in out.splitlines():
+                line = line.strip()
+                if line:
+                    yield line[3:] if line.startswith("id:") else line
+            return
+        out = self._run(["show", "--format=json", "--format-version=5", "--body=true", self._query])
+        for message in _iter_messages(json.loads(out) if out.strip() else []):
+            mid = str(message["id"])
+            yield mid
+            for part_id, _filename, _mime in _attachment_parts(message.get("body") or []):
+                yield f"{mid}#{part_id}"
 
     def current_cursor(self) -> Cursor:
         return self._next_cursor

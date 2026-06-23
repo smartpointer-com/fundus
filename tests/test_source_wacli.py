@@ -66,6 +66,24 @@ def test_wacli_live_ids(tmp_path):
     assert set(_src(db).live_ids()) == {"chatA", "chatB"}
 
 
+def test_wacli_live_ids_includes_present_document_media(tmp_path):
+    db = tmp_path / "w.db"
+    _make_db(db)
+    media_file = tmp_path / "media" / "chatA" / "9" / "document" / "invoice.pdf"
+    media_file.parent.mkdir(parents=True)
+    media_file.write_bytes(b"%PDF-1.7 fake")
+    _add_message(db, ("9", "chatA", "Alice", 1700000300, "Alice", None, "doc", None,
+                      "document", "invoice.pdf", "application/pdf",
+                      "/OLD/STORE/media/chatA/9/document/invoice.pdf"))
+    # a document whose local file is gone must NOT be live (so --full prunes it)
+    _add_message(db, ("11", "chatA", "Alice", 1700000400, "Alice", None, None, None,
+                      "document", "gone.pdf", "application/pdf",
+                      "/x/media/chatA/11/document/gone.pdf"))
+    ids = set(_src(db).live_ids())
+    assert "9" in ids and "11" not in ids      # present media is live; missing is pruned
+    assert {"chatA", "chatB"} <= ids           # chats still live
+
+
 def test_to_datetime_units():
     assert to_datetime(1700000000).year == 2023
     assert to_datetime(1700000000000).year == 2023  # milliseconds

@@ -56,6 +56,17 @@ def test_files_fingerprints_are_stat_only_and_skip_empty(tmp_path):
     assert float(src.current_cursor()) >= st.st_mtime  # walk advanced the watermark
 
 
+def test_files_skips_video_and_audio_media(tmp_path):
+    (tmp_path / "doc.pdf").write_bytes(b"%PDF-1.7 x")
+    (tmp_path / "clip.mp4").write_bytes(b"\x00\x00\x00\x18ftypmp42")
+    (tmp_path / "note.mp3").write_bytes(b"ID3 x")
+    src = FilesSource("docs", roots=[str(tmp_path)])
+    # skipped uniformly across changed / fingerprints / live_ids (filtered at the walk)
+    assert {Path(i.native_id).name for i in src.changed(None)} == {"doc.pdf"}
+    assert {Path(p).name for p, _ in src.fingerprints()} == {"doc.pdf"}
+    assert {Path(p).name for p in src.live_ids()} == {"doc.pdf"}
+
+
 def test_files_load_reads_one_file(tmp_path):
     f = tmp_path / "a.txt"
     f.write_text("hello")

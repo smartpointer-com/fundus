@@ -13,6 +13,7 @@ Two change-detection modes share one tree walk:
 
 from __future__ import annotations
 
+import mimetypes
 import os
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -21,6 +22,16 @@ from pathlib import Path
 from fundus.core.ids import content_sha256
 from fundus.core.mime import guess_mime
 from fundus.models import BlobPayload, Cursor, FileStat, SourceItem
+
+# Media with no extractable text — skipped wholesale (no point sending a video to the OCR engine).
+# Detected by extension (cheap, works in the stat-only fingerprint walk); images are NOT skipped,
+# since scans/photos can carry text worth OCR'ing.
+_SKIP_MEDIA_PREFIXES = ("video/", "audio/")
+
+
+def _is_skippable_media(name: str) -> bool:
+    mime, _ = mimetypes.guess_type(name)
+    return mime is not None and mime.startswith(_SKIP_MEDIA_PREFIXES)
 
 
 class FilesSource:
@@ -37,7 +48,7 @@ class FilesSource:
             if not root.exists():
                 continue
             for path in root.rglob("*"):
-                if path.is_file():
+                if path.is_file() and not _is_skippable_media(path.name):
                     yield path
 
     def _too_big(self, size: int) -> bool:

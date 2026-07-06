@@ -6,7 +6,8 @@ fidelity.
 
 ``/v1/convert/file`` takes multipart form-data: ``files`` plus option fields as
 REPEATED form fields (e.g. ``to_formats=md``, not a JSON string). The response is
-``{"document": {"md_content": ...}}``.
+``{"document": {"md_content": ..., "json_content": ...}}``; json_content is used to
+salvage OCR text from scan pages the markdown serializer renders as bare images.
 """
 
 from __future__ import annotations
@@ -21,9 +22,21 @@ import structlog
 
 from fundus.extract.base import ExtractRequest
 from fundus.extract.normalize import markdown_to_blocks
-from fundus.models import DocMeta, EngineRef, ExtractionResult
+from fundus.models import Block, DocMeta, EngineRef, ExtractionResult
 
 log = structlog.get_logger("fundus.extract.docling")
+
+
+def _picture_texts(json_content: dict[str, Any]) -> list[str]:
+    """Text items nested inside picture elements, in reading order — the OCR output the
+    markdown serializer omits (it renders the whole picture as an image placeholder)."""
+    out: list[str] = []
+    for item in json_content.get("texts") or []:
+        parent = (item.get("parent") or {}).get("$ref") or ""
+        text = (item.get("text") or "").strip()
+        if parent.startswith("#/pictures/") and text:
+            out.append(text)
+    return out
 
 
 def _is_resource_failure(exc: Exception) -> bool:
@@ -87,8 +100,9 @@ class DoclingServeExtractor:
     def _extract(self, req: ExtractRequest) -> ExtractionResult:
         do_ocr = req.options.ocr != "off"
         # docling-serve wants list options as REPEATED form fields; httpx encodes a dict value
-        # that is a list as repeated parts (to_formats -> "md"), not a JSON string.
-        form: dict[str, Any] = {"to_formats": ["md"], "do_ocr": str(do_ocr).lower()}
+        # that is a list as repeated parts (to_formats -> "md", "json"), not a JSON string.
+        # We ask for json alongside md to salvage OCR text the md serializer drops (below).
+        form: dict[str, Any] = {"to_formats": ["md", "json"], "do_ocr": str(do_ocr).lower()}
         if req.options.ocr == "force":
             form["force_ocr"] = "true"
         files = {
@@ -105,9 +119,17 @@ class DoclingServeExtractor:
     def _to_result(self, payload: dict[str, Any], *, ocr: bool) -> ExtractionResult:
         doc = payload.get("document") or {}
         md = doc.get("md_content") or doc.get("text_content") or ""
+        blocks = markdown_to_blocks(md)
+        # Scanned pages are often layout-classified as one full-page picture; docling's markdown
+        # serializer then emits "<!-- image -->" and DROPS the OCR text nested inside the picture.
+        # That text is still in the json document as text items parented to a picture — salvage it.
+        salvaged = _picture_texts(doc.get("json_content") or {})
+        if salvaged:
+            blocks.extend(Block(type="paragraph", text=t) for t in salvaged)
+            md = "\n\n".join(filter(None, [md, *salvaged]))
         return ExtractionResult(
             engine=EngineRef(name=self.name, version=self.version),
-            blocks=markdown_to_blocks(md),
+            blocks=blocks,
             markdown=md,
             metadata=DocMeta(ocr_used=ocr),
         )

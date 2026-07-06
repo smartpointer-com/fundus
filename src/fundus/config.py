@@ -71,6 +71,9 @@ class RouterConfig(BaseModel):
     fast: str = "tika"
     quality: str = "docling-serve"
     min_chars: int = 100
+    # Never escalate files larger than this (bytes; None = no cap). A sparse result on a very
+    # large file is typically a whole scanned book, and OCRing it can crash the quality engine.
+    max_bytes: int | None = None
 
 
 class ExtractorConfig(BaseModel):

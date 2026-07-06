@@ -29,6 +29,7 @@ def build_extractor(name: str, config: ExtractorConfig) -> Extractor:
             build_extractor(rc.fast, config),
             build_extractor(rc.quality, config),
             min_chars=rc.min_chars,
+            max_bytes=rc.max_bytes,
         )
     if name not in _BUILDERS:
         raise KeyError(f"unknown extraction engine: {name!r} (have {available_engines()})")

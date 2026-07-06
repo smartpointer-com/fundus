@@ -61,6 +61,31 @@ def test_docling_maps_md_to_blocks():
     assert "Body." in res.markdown
 
 
+def test_docling_salvages_ocr_text_from_picture_pages():
+    # A scanned page classified as one full-page picture: md_content collapses to an image
+    # placeholder while the OCR text items sit inside the picture in json_content.
+    document = {
+        "md_content": "<!-- image -->",
+        "json_content": {
+            "texts": [
+                {"text": "TAXICAB FARE", "parent": {"$ref": "#/pictures/0"}},
+                {"text": "  ", "parent": {"$ref": "#/pictures/0"}},  # blank: dropped
+                {"text": "Body prose.", "parent": {"$ref": "#/body"}},  # in md already
+            ],
+        },
+    }
+
+    def handler(request):
+        assert b'name="to_formats"' in request.content
+        return httpx.Response(200, json={"document": document})
+
+    extractor = DoclingServeExtractor("http://docling:5001", client=_client(handler))
+    res = extractor.extract(_req())
+    assert [b.text for b in res.blocks if b.type == "paragraph"] == ["TAXICAB FARE"]
+    assert "TAXICAB FARE" in res.markdown  # visible to the escalation router's sparseness check
+    assert "Body prose." not in res.markdown  # body-parented text is not double-added
+
+
 def test_docling_max_concurrency_caps_in_flight_requests():
     import threading
     import time
@@ -122,6 +147,19 @@ def test_escalate_to_quality_when_fast_errors():
     fast, quality = _FakeEngine("tika", fail=True), _FakeEngine("docling", "y" * 200)
     EscalatingExtractor(fast, quality, min_chars=100).extract(_req())
     assert quality.calls == 1
+
+
+def test_escalate_skips_oversized_files():
+    # A sparse fast result on a huge file (a scanned book) must NOT escalate: OCRing it can
+    # crash the quality engine. The sparse fast result is kept instead.
+    fast, quality = _FakeEngine("tika", "tiny"), _FakeEngine("docling", "y" * 200)
+    big = ExtractRequest(data=b"x" * 1000, mime_type="application/pdf", options=ExtractOptions())
+    res = EscalatingExtractor(fast, quality, min_chars=100, max_bytes=999).extract(big)
+    assert "tiny" in res.markdown and quality.calls == 0
+    # ...but a file at/below the cap still escalates.
+    small = ExtractRequest(data=b"x" * 999, mime_type="application/pdf", options=ExtractOptions())
+    res = EscalatingExtractor(fast, quality, min_chars=100, max_bytes=999).extract(small)
+    assert "y" in res.markdown and quality.calls == 1
 
 
 def test_escalate_forces_ocr_off_on_fast_pass():

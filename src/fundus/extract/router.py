@@ -27,11 +27,13 @@ class EscalatingExtractor:
         quality: Extractor,
         *,
         min_chars: int = 100,
+        max_bytes: int | None = None,
         version: str = "1",
     ) -> None:
         self._fast = fast
         self._quality = quality
         self._min_chars = min_chars
+        self._max_bytes = max_bytes
         # Distinct version so escalate results cache separately from a single-engine run.
         self.version = f"{version}+{fast.name}/{quality.name}"
 
@@ -47,6 +49,17 @@ class EscalatingExtractor:
             log.info("fast extract failed; escalating", filename=req.filename, error=str(exc))
             return self._quality.extract(req)
         if len(result.markdown.strip()) >= self._min_chars:
+            return result
+        # A sparse result on a very large file is almost certainly a huge scan (e.g. a whole
+        # scanned book). OCRing it can exhaust the quality engine's memory and crash it — taking
+        # down every in-flight conversion — and, because a failed extraction is never cached, the
+        # same file would re-crash it on every nightly full reconcile. Keep the sparse result.
+        if self._max_bytes is not None and len(req.data) > self._max_bytes:
+            log.info(
+                "sparse but too large to escalate; keeping fast result",
+                filename=req.filename,
+                bytes=len(req.data),
+            )
             return result
         log.info(
             "fast result too sparse; escalating",

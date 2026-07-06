@@ -67,6 +67,9 @@ url = "http://127.0.0.1:9998"
 # fast = "tika"
 # quality = "docling-serve"
 # min_chars = 100
+# max_bytes = 35_000_000  # never escalate files above this size — a sparse result on a very large
+#                         # file is typically a whole scanned book, and OCRing it can crash the
+#                         # quality engine (which then also kills every in-flight conversion)
 
 # --- Sources (pluggable). Add as many as you like, of any supported type. ---
 # notmuch and wacli also index document attachments / shared files by default

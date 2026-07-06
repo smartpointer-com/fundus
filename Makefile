@@ -23,7 +23,7 @@ install:  ## Install the fundus + fundus-client CLIs for use (isolated, survives
 		echo "  brew install pipx && pipx ensurepath     # macOS (Homebrew Python is externally managed)"; \
 		echo "  python3 -m pip install --user pipx       # other Python"; \
 		exit 1; }
-	pipx install .        # exposes both console scripts (fundus, fundus-client)
+	pipx install --force .   # exposes both console scripts (fundus, fundus-client); --force = upgrade in place
 
 dev:  ## Set up the editable dev environment in ./$(VENV).
 	python3 -m venv $(VENV)

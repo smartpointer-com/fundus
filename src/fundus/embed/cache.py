@@ -12,6 +12,7 @@ import array
 import hashlib
 import sqlite3
 from collections.abc import Sequence
+from contextlib import closing
 from pathlib import Path
 
 
@@ -41,10 +42,13 @@ class SqliteEmbeddingCache:
         self._path = path
         self._model = model
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as conn:
+        with closing(self._connect()) as conn, conn:
             conn.execute("CREATE TABLE IF NOT EXISTS embeddings (key TEXT PRIMARY KEY, vec BLOB)")
 
     def _connect(self) -> sqlite3.Connection:
+        # Callers must close deterministically (``closing``): sqlite3's context manager only
+        # scopes the TRANSACTION, and an unclosed connection sits on a file descriptor until the
+        # cyclic GC runs — a long indexing run exhausts the fd limit long before that.
         conn = sqlite3.connect(self._path, timeout=30.0)
         conn.execute("PRAGMA journal_mode=WAL")
         return conn
@@ -55,7 +59,7 @@ class SqliteEmbeddingCache:
     def get_many(self, texts: list[str]) -> list[list[float] | None]:
         keys = [self._key(t) for t in texts]
         found: dict[str, list[float]] = {}
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             for i in range(0, len(keys), 400):
                 batch = keys[i : i + 400]
                 placeholders = ",".join("?" * len(batch))
@@ -67,5 +71,5 @@ class SqliteEmbeddingCache:
 
     def put_many(self, texts: list[str], vectors: list[list[float]]) -> None:
         rows = [(self._key(t), _encode(v)) for t, v in zip(texts, vectors, strict=True)]
-        with self._connect() as conn:
+        with closing(self._connect()) as conn, conn:
             conn.executemany("INSERT OR REPLACE INTO embeddings (key, vec) VALUES (?, ?)", rows)

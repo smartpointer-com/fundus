@@ -1,7 +1,32 @@
 import os
 from pathlib import Path
 
+import pytest
+
 from fundus.sources.files import FilesSource
+
+
+def test_files_walk_fails_loudly_on_missing_root(tmp_path):
+    # A vanished root (unmounted volume, typo) must error, not read as an empty tree —
+    # a --full reconcile would otherwise prune the whole source.
+    src = FilesSource("docs", roots=[str(tmp_path / "gone")])
+    with pytest.raises(RuntimeError, match="root not available"):
+        list(src.fingerprints())
+
+
+def test_files_walk_fails_loudly_on_unreadable_dir(tmp_path):
+    if os.geteuid() == 0:
+        pytest.skip("permissions don't bind as root")
+    (tmp_path / "ok.txt").write_text("x")
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    (locked / "hidden.txt").write_text("y")
+    locked.chmod(0o000)
+    try:
+        with pytest.raises(OSError):
+            list(FilesSource("docs", roots=[str(tmp_path)]).fingerprints())
+    finally:
+        locked.chmod(0o755)
 
 
 def test_files_changed_and_cursor(tmp_path):

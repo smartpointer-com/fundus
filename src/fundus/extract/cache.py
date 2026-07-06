@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from contextlib import closing
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -44,7 +45,7 @@ class SqliteExtractionCache:
     def __init__(self, path: str | Path) -> None:
         self._path = str(path)
         Path(self._path).parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as conn:
+        with closing(self._connect()) as conn, conn:
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS extractions ("
                 "key TEXT PRIMARY KEY, result TEXT NOT NULL, created REAL NOT NULL)"
@@ -53,17 +54,20 @@ class SqliteExtractionCache:
     def _connect(self) -> sqlite3.Connection:
         # A new connection per call (each worker thread gets its own); the busy timeout lets
         # concurrent writers from the worker pool wait instead of erroring "database is locked".
+        # Callers must close deterministically (``closing``): sqlite3's context manager only
+        # scopes the TRANSACTION, and an unclosed connection sits on a file descriptor until the
+        # cyclic GC runs — a long indexing run exhausts the fd limit long before that.
         return sqlite3.connect(self._path, timeout=30.0)
 
     def get(self, key: CacheKey) -> ExtractionResult | None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             row = conn.execute(
                 "SELECT result FROM extractions WHERE key = ?", (key.as_str(),)
             ).fetchone()
         return ExtractionResult.model_validate_json(row[0]) if row else None
 
     def put(self, key: CacheKey, result: ExtractionResult) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn, conn:
             conn.execute(
                 "INSERT OR REPLACE INTO extractions (key, result, created) VALUES (?, ?, ?)",
                 (key.as_str(), result.model_dump_json(), time.time()),

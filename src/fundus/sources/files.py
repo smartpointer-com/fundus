@@ -34,6 +34,10 @@ def _is_skippable_media(name: str) -> bool:
     return mime is not None and mime.startswith(_SKIP_MEDIA_PREFIXES)
 
 
+def _raise(exc: OSError) -> None:
+    raise exc
+
+
 class FilesSource:
     type = "files"
 
@@ -44,12 +48,20 @@ class FilesSource:
         self._max_mtime = 0.0
 
     def _walk(self) -> Iterator[Path]:
+        # The walk must fail LOUDLY, never silently truncate: enumeration feeds the --full
+        # reconcile, and a half-visible tree (unmounted root, permission failure, fd exhaustion)
+        # reads as mass deletion and prunes the index. Hence: a missing root is an error (not a
+        # skip), and unreadable directories raise (os.walk's default is to silently skip them).
         for root in self._roots:
-            if not root.exists():
-                continue
-            for path in root.rglob("*"):
-                if path.is_file() and not _is_skippable_media(path.name):
-                    yield path
+            if not root.is_dir():
+                raise RuntimeError(f"files source {self.name!r}: root not available: {root}")
+            for dirpath, _dirnames, filenames in os.walk(root, onerror=_raise):
+                for filename in filenames:
+                    if _is_skippable_media(filename):
+                        continue
+                    path = Path(dirpath) / filename
+                    if path.is_file():  # drop dangling symlinks, sockets, ...
+                        yield path
 
     def _too_big(self, size: int) -> bool:
         return self._max_bytes is not None and size > self._max_bytes

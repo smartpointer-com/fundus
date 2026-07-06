@@ -39,6 +39,11 @@ def index(
         "(by size+mtime) the cursor can't see.",
     ),
     force: bool = typer.Option(False, help="Ignore saved cursors and re-read everything."),
+    allow_mass_delete: bool = typer.Option(
+        False,
+        help="Let a --full reconcile prune more than a quarter of a source's indexed files "
+        "(normally refused, since an incompletely enumerated tree looks identical).",
+    ),
     workers: int | None = typer.Option(None, help="Override the indexing worker count."),
     config: Path | None = ConfigOpt,
 ) -> None:
@@ -48,7 +53,9 @@ def index(
         cfg.workers = workers
     try:
         with run_lock(str(cfg.lock_path())):
-            counts = build_pipeline(cfg).index(only=only, full=full, force=force)
+            counts = build_pipeline(cfg).index(
+                only=only, full=full, force=force, allow_mass_delete=allow_mass_delete
+            )
     except AlreadyRunning:
         typer.echo("Another fundus run holds the lock; skipping.")
         raise typer.Exit(code=0) from None

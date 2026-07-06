@@ -368,3 +368,29 @@ def test_full_tree_reconcile_skips_unchanged():
     )
     assert n == 0 and sink.docs == []  # nothing re-read or re-indexed
     assert sink.deleted_parents == [set()]  # no parents to clear
+
+
+def test_full_tree_reconcile_refuses_mass_prune():
+    # A large indexed manifest vs. a tree that suddenly looks near-empty (unmounted volume,
+    # permission failure, resource exhaustion): abort loudly, never prune.
+    indexed = {f"f{i}": FileStat(2, 100.0) for i in range(1000)}
+    disk = {f"f{i}": (FileStat(2, 100.0), b"aa") for i in range(400)}  # 600 "removed" > 25%
+    sink = FakeSink(fingerprints=indexed)
+    pipeline = Pipeline(FundusConfig(), sink, FakeExtractor(), DictCache(), DictState())
+    with pytest.raises(RuntimeError, match="refusing to prune"):
+        pipeline.index_source(FakeTreeSource("docs", disk), full=True)
+    assert sink.deleted_parents == []  # nothing was deleted
+    # An intentional purge goes through with the explicit override.
+    pipeline.index_source(FakeTreeSource("docs", disk), full=True, allow_mass_delete=True)
+    assert len(sink.deleted_parents[0]) == 600
+
+
+def test_full_tree_reconcile_allows_bounded_prune():
+    # Under both bounds (25% and the absolute floor): a genuine deletion goes through.
+    indexed = {f"f{i}": FileStat(2, 100.0) for i in range(1000)}
+    disk = {f"f{i}": (FileStat(2, 100.0), b"aa") for i in range(800)}  # 200 removed, 20%
+    sink = FakeSink(fingerprints=indexed)
+    Pipeline(FundusConfig(), sink, FakeExtractor(), DictCache(), DictState()).index_source(
+        FakeTreeSource("docs", disk), full=True
+    )
+    assert len(sink.deleted_parents[0]) == 200

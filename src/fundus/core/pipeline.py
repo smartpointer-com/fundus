@@ -45,6 +45,10 @@ from fundus.sources.registry import build_source
 
 log = structlog.get_logger("fundus.pipeline")
 
+# A --full reconcile aborts rather than prune more than a quarter of a source's indexed files
+# (small trees get this absolute allowance instead, where large relative churn is normal).
+_MASS_DELETE_FLOOR = 100
+
 
 def to_extraction(
     item: SourceItem, extractor: Extractor, cache: ExtractionCache, options: ExtractOptions
@@ -118,12 +122,21 @@ class Pipeline:
     def ensure_schema(self) -> None:
         self._sink.ensure_schema(self.index_settings())
 
-    def index(self, *, only: str | None = None, full: bool = False, force: bool = False) -> dict[str, int]:
+    def index(
+        self,
+        *,
+        only: str | None = None,
+        full: bool = False,
+        force: bool = False,
+        allow_mass_delete: bool = False,
+    ) -> dict[str, int]:
         counts: dict[str, int] = {}
         for cfg in self._config.sources:
             if only and cfg.name != only:
                 continue
-            counts[cfg.name] = self.index_source(build_source(cfg), full=full, force=force)
+            counts[cfg.name] = self.index_source(
+                build_source(cfg), full=full, force=force, allow_mass_delete=allow_mass_delete
+            )
         return counts
 
     def _embed(self, docs: list[IndexDocument]) -> None:
@@ -190,10 +203,17 @@ class Pipeline:
             self._sink.upsert(batch)
         return total
 
-    def index_source(self, source: Source, *, full: bool = False, force: bool = False) -> int:
+    def index_source(
+        self,
+        source: Source,
+        *,
+        full: bool = False,
+        force: bool = False,
+        allow_mass_delete: bool = False,
+    ) -> int:
         # A full pass on a file tree reconciles by content fingerprint, not the mtime cursor.
         if full and isinstance(source, TreeSource):
-            return self._reconcile_tree(source)
+            return self._reconcile_tree(source, allow_mass_delete=allow_mass_delete)
         cursor = None if force else self._state.get_cursor(source.name)
         total = self._drain(source.changed(cursor))
         self._state.set_cursor(source.name, source.current_cursor())
@@ -203,13 +223,23 @@ class Pipeline:
         log.info("indexed", source=source.name, chunks=total)
         return total
 
-    def _reconcile_tree(self, source: TreeSource) -> int:
+    def _reconcile_tree(self, source: TreeSource, *, allow_mass_delete: bool = False) -> int:
         """Rsync-style ``--full`` for a file tree: diff the live tree's fingerprints against the
         indexed manifest, re-index new/edited files and drop removed ones — independent of the
         mtime cursor, so an edit is caught even if its mtime regressed or never moved."""
         disk = dict(source.fingerprints())
         indexed = self._sink.indexed_fingerprints(source.name)
         changed, removed = diff_tree(disk, indexed)
+        # Guardrail against mass pruning: when a large share of the manifest reads as removed,
+        # an incomplete enumeration (unmounted volume, permission failure, resource exhaustion)
+        # is as likely as a genuine mass deletion — and pruning on a bad read is destructive.
+        # Abort by default; an intentional purge re-runs with --allow-mass-delete.
+        if not allow_mass_delete and len(removed) > max(_MASS_DELETE_FLOOR, len(indexed) // 4):
+            raise RuntimeError(
+                f"refusing to prune {len(removed)} of {len(indexed)} indexed files for source "
+                f"{source.name!r}: either the live tree is incompletely enumerated, or this is "
+                "a deliberate mass deletion — re-run with --allow-mass-delete if it is"
+            )
         # Clear changed parents too (not just removed): a file that re-chunks into fewer pieces
         # would otherwise leave orphaned high-seq chunks behind under the same parent id.
         dead = {parent_id(source.name, nid) for nid in changed | removed}

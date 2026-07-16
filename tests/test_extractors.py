@@ -114,11 +114,12 @@ def test_docling_max_concurrency_caps_in_flight_requests():
 
 
 class _FakeEngine:
-    def __init__(self, name, text="", fail=False):
+    def __init__(self, name, text="", fail=False, ocr_text=None):
         self.name = name
         self.version = "1"
         self._text = text
         self._fail = fail
+        self._ocr_text = ocr_text  # returned instead of text when OCR is forced
         self.calls = 0
         self.seen_ocr = []
 
@@ -127,6 +128,8 @@ class _FakeEngine:
         self.seen_ocr.append(req.options.ocr)
         if self._fail:
             raise RuntimeError("engine down")
+        if req.options.ocr == "force" and self._ocr_text is not None:
+            return ExtractionResult.from_text(self._ocr_text)
         return ExtractionResult.from_text(self._text)
 
 
@@ -166,6 +169,50 @@ def test_escalate_forces_ocr_off_on_fast_pass():
     fast, quality = _FakeEngine("tika", "x" * 200), _FakeEngine("docling", "y" * 200)
     EscalatingExtractor(fast, quality, min_chars=100).extract(_req(ocr="force"))
     assert fast.seen_ocr == ["off"]  # cheap pass forced OCR off regardless of caller's request
+
+
+def test_escalate_retries_fast_with_ocr_when_quality_also_sparse():
+    # A scan the quality engine rasterizes to a blank document: both rungs sparse, but the
+    # fast engine's own OCR reads it. Its result must win instead of caching empty forever.
+    fast = _FakeEngine("tika", text="", ocr_text="z" * 200)
+    quality = _FakeEngine("docling", "")
+    res = EscalatingExtractor(fast, quality, min_chars=100).extract(_req())
+    assert "z" in res.markdown
+    assert fast.seen_ocr == ["off", "force"] and quality.calls == 1
+
+
+def test_escalate_keeps_best_result_when_all_rungs_sparse():
+    # All three attempts sparse: the longest one wins (here the quality engine's).
+    fast = _FakeEngine("tika", text="a", ocr_text="bb")
+    quality = _FakeEngine("docling", "ccc")
+    res = EscalatingExtractor(fast, quality, min_chars=100).extract(_req())
+    assert res.markdown == "ccc"
+
+
+def test_escalate_no_ocr_retry_when_caller_disabled_ocr():
+    fast = _FakeEngine("tika", text="", ocr_text="z" * 200)
+    quality = _FakeEngine("docling", "")
+    res = EscalatingExtractor(fast, quality, min_chars=100).extract(_req(ocr="off"))
+    assert fast.seen_ocr == ["off"]  # no forced-OCR pass against the caller's wishes
+    assert res.markdown == ""
+
+
+def test_escalate_quality_failure_salvaged_by_fast_ocr():
+    fast = _FakeEngine("tika", text="", ocr_text="z" * 200)
+    quality = _FakeEngine("docling", fail=True)
+    res = EscalatingExtractor(fast, quality, min_chars=100).extract(_req())
+    assert "z" in res.markdown  # engine failure rescued by the OCR rung
+
+
+def test_escalate_quality_failure_reraised_when_ocr_sparse():
+    import pytest
+
+    # If the OCR rung can't produce a usable result either, the quality failure must
+    # propagate (uncached) so a transient engine error is retried on a later run.
+    fast = _FakeEngine("tika", text="", ocr_text="")
+    quality = _FakeEngine("docling", fail=True)
+    with pytest.raises(RuntimeError):
+        EscalatingExtractor(fast, quality, min_chars=100).extract(_req())
 
 
 def test_docling_resource_failure_retries_exclusively():

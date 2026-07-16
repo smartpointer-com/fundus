@@ -111,6 +111,21 @@ def test_wacli_emits_document_media_items(tmp_path):
     assert "whatsapp" in f.tags and "attachment" in f.tags
 
 
+def test_wacli_media_tags_are_configurable(tmp_path):
+    # The connector reads any wacli-shaped store; a Slack archive's documents
+    # must not come out tagged "whatsapp".
+    db = tmp_path / "w.db"
+    _make_db(db)
+    media_file = tmp_path / "media" / "chatA" / "9" / "document" / "invoice.pdf"
+    media_file.parent.mkdir(parents=True)
+    media_file.write_bytes(b"%PDF-1.7 fake")
+    _add_message(db, ("9", "chatA", "Alice", 1700000300, "Alice", None, "doc", None,
+                      "document", "invoice.pdf", "application/pdf",
+                      "/OLD/STORE/media/chatA/9/document/invoice.pdf"))
+    files = [i for i in _src(db, tags=("slack", "attachment")).changed(None) if i.item_kind == "file"]
+    assert files[0].tags == ["slack", "attachment"]
+
+
 def test_wacli_skips_media_when_file_missing(tmp_path):
     db = tmp_path / "w.db"
     _make_db(db)

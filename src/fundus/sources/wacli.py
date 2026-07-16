@@ -59,6 +59,7 @@ class WacliSource:
         path_col: str = "local_path",
         document_media_type: str = "document",
         media_dir: str | None = None,
+        tags: tuple[str, ...] = ("whatsapp", "attachment"),
         connect: Connect | None = None,
     ) -> None:
         self.name = name
@@ -77,6 +78,9 @@ class WacliSource:
         self._mime_col = mime_col
         self._path_col = path_col
         self._document_media_type = document_media_type
+        # Stamped on emitted media items. Configurable because this connector reads any
+        # wacli-shaped store, not only WhatsApp — a Slack archive's PDFs are not "whatsapp".
+        self._tags = list(tags)
         # Stored local_path values can be stale (the store may have moved); keep only the part after
         # ".../media/" and rejoin it to the current media dir (default: alongside the db).
         self._media_dir = media_dir or str(Path(self._db).parent / "media")
@@ -140,7 +144,7 @@ class WacliSource:
                 title=str(filename) if filename else "document",
                 ts=to_datetime(ts),
                 actors=[sender] if sender else [],
-                tags=["whatsapp", "attachment"],
+                tags=list(self._tags),
                 mime_type=mime,
                 payload=BlobPayload(path=path),
             )

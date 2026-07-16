@@ -84,7 +84,13 @@ query = "*"
 [[sources]]
 name = "chat"
 type = "wacli"
-db   = "/path/to/whatsapp.db"    # a wacli SQLite database (opened read-only)
+db   = "/path/to/whatsapp.db"    # a wacli-shaped SQLite message store (opened read-only)
+# The connector reads any store with this row shape; table and column names are all
+# overridable (table, id_col, chat_col, ..., text_cols), so another archiver's export —
+# e.g. a Slack archive exposing a compatible view — plugs in with config alone:
+# table     = "messages_flat"
+# text_cols = ["text"]
+# tags      = ["slack", "attachment"]   # stamped on shared-document items (default: whatsapp)
 
 [sources.window]
 target_tokens  = 512

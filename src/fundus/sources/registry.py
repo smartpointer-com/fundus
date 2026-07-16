@@ -26,6 +26,7 @@ _WACLI_KEYS = {
     "path_col",
     "document_media_type",
     "media_dir",
+    "tags",
 }
 
 

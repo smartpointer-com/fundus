@@ -90,15 +90,18 @@ fundus serve                        # streamable-HTTP on 127.0.0.1:8181 by defau
 To keep it running, install it as a managed daemon instead of launching by hand —
 `fundus service install` includes it as the `<prefix>.serve` job (see *Service jobs*).
 
-Point an agent at it — OpenClaw has native MCP support:
+To point a client at it, `fundus connect` prints ready-to-paste registrations
+(OpenClaw, Claude Code, or a generic JSON stanza) with the endpoint and token
+filled in from config:
 
 ```bash
-openclaw mcp add fundus --url http://127.0.0.1:8181/mcp --header "Authorization: Bearer $FUNDUS_SERVE_TOKEN"
+fundus connect openclaw   # → openclaw mcp add fundus --url http://127.0.0.1:8181/mcp --header "Authorization: Bearer …"
 ```
 
 [skills/fundus-search/SKILL.md](skills/fundus-search/SKILL.md) is a ready-made
-agent skill describing the three tools; copy or symlink it into your agent's
-skills directory.
+agent skill describing the three tools; copy it into your agent's skills
+directory. The full walkthrough — persistence on macOS/Linux, registration,
+skill install, verification — is in [docs/agents.md](docs/agents.md).
 
 For humans and shell scripts, **`fundus-client`** is a thin MCP client (holds only
 the endpoint + token, no Meili keys):

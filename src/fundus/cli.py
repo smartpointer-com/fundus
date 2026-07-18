@@ -97,6 +97,53 @@ def query(
 
 
 @app.command()
+def connect(
+    client: str = typer.Argument("all", help="openclaw | claude | json | all"),
+    config: Path | None = ConfigOpt,
+) -> None:
+    """Print ready-to-paste MCP registration for a client, with the endpoint and token filled in
+    from config. Registers nothing itself — run the printed command (or paste the JSON) in the
+    client's own configuration."""
+    cfg = load_config(config)
+    if cfg.serve.transport == "stdio":
+        typer.echo(
+            "transport is stdio: the client spawns the server itself, e.g.\n"
+            "  claude mcp add fundus -- fundus serve --transport stdio"
+        )
+        return
+    token = cfg.serve.token or "$FUNDUS_SERVE_TOKEN"
+    if cfg.serve.token is None:
+        typer.echo(
+            "warning: no serve token configured ([serve].token / FUNDUS_SERVE_TOKEN); "
+            "the HTTP transports refuse to start without one",
+            err=True,
+        )
+    endpoint = cfg.serve.endpoint()
+    auth = f"Authorization: Bearer {token}"
+    kind = "sse" if cfg.serve.transport == "sse" else "http"
+    blocks = {
+        "openclaw": f'openclaw mcp add fundus --url {endpoint} --header "{auth}"',
+        "claude": f'claude mcp add --transport {kind} fundus {endpoint} --header "{auth}"',
+        "json": json.dumps(
+            {"fundus": {"type": kind, "url": endpoint, "headers": {"Authorization": f"Bearer {token}"}}},
+            indent=2,
+        ),
+    }
+    titles = {"openclaw": "OpenClaw", "claude": "Claude Code", "json": "any MCP client (JSON)"}
+    if client != "all" and client not in blocks:
+        typer.echo(f"unknown client '{client}' (expected: {', '.join(blocks)}, all)", err=True)
+        raise typer.Exit(code=2)
+    for name, block in blocks.items():
+        if client not in ("all", name):
+            continue
+        if client == "all":
+            typer.echo(f"# {titles[name]}")
+        typer.echo(block)
+        if client == "all":
+            typer.echo("")
+
+
+@app.command()
 def serve(
     transport: str | None = typer.Option(
         None, help="streamable-http (default) | sse | stdio. HTTP transports need a bearer token."

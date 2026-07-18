@@ -136,6 +136,7 @@ make dev       # create the editable dev environment in ./.venv
 make lint      # ruff + mypy
 make test      # pytest
 make up        # start Meilisearch + extraction engines (Docker)
+make           # build the wheel + sdist into ./dist (installs nothing)
 ```
 
 (`make install` is the *user* install — it puts the `fundus` and `fundus-client`

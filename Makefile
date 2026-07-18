@@ -15,7 +15,20 @@ FUNDUS := $(shell [ -x $(VENV)/bin/fundus ] && echo $(VENV)/bin/fundus || echo f
 # falling back to the compose default if Fundus isn't set up yet.
 MEILI_DATA := $(shell $(FUNDUS) paths --meili-data 2>/dev/null || echo ./data/meili)
 
-.PHONY: install dev fmt lint test up down
+.PHONY: build install dev fmt lint test clean up down
+
+.DEFAULT_GOAL := build
+
+build:  ## Build the wheel + sdist into ./dist (no install).
+	@command -v pipx >/dev/null 2>&1 || { \
+		echo "pipx not found — install it first:"; \
+		echo "  brew install pipx && pipx ensurepath     # macOS (Homebrew Python is externally managed)"; \
+		echo "  python3 -m pip install --user pipx       # other Python"; \
+		exit 1; }
+	pipx run build
+
+clean:  ## Remove build artifacts.
+	rm -rf dist
 
 install:  ## Install the fundus + fundus-client CLIs for use (isolated, survives deleting this repo).
 	@command -v pipx >/dev/null 2>&1 || { \

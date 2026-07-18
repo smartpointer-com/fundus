@@ -33,6 +33,15 @@ def test_cli_sources_json(tmp_path):
     assert any(r["type"] == "files" and r["config"].get("roots") == ["/tmp"] for r in data)
 
 
+def test_cli_bare_invocation_prints_help():
+    from fundus.client.cli import client_app
+
+    result = runner.invoke(app, [])
+    client_result = runner.invoke(client_app, [])
+    assert "Usage" in result.output and "Commands" in result.output
+    assert result.exit_code == client_result.exit_code  # bare fundus == bare fundus-client
+
+
 def test_cli_help_lists_commands():
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0

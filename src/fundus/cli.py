@@ -16,7 +16,9 @@ from fundus.extract.registry import build_extractor
 from fundus.render import print_result as _print_result
 from fundus.service.cli import service_app
 
-app = typer.Typer(add_completion=False, help="Index and search a heterogeneous corpus.")
+app = typer.Typer(
+    add_completion=False, no_args_is_help=True, help="Index and search a heterogeneous corpus."
+)
 app.add_typer(service_app, name="service")
 
 ConfigOpt = typer.Option(None, "--config", "-c", help="Path to fundus.toml (default: XDG).")

@@ -96,6 +96,10 @@ Point an agent at it — OpenClaw has native MCP support:
 openclaw mcp add fundus --url http://127.0.0.1:8181/mcp --header "Authorization: Bearer $FUNDUS_SERVE_TOKEN"
 ```
 
+[skills/fundus-search/SKILL.md](skills/fundus-search/SKILL.md) is a ready-made
+agent skill describing the three tools; copy or symlink it into your agent's
+skills directory.
+
 For humans and shell scripts, **`fundus-client`** is a thin MCP client (holds only
 the endpoint + token, no Meili keys):
 

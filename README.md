@@ -89,6 +89,8 @@ fundus serve                        # streamable-HTTP on 127.0.0.1:8181 by defau
 
 To keep it running, install it as a managed daemon instead of launching by hand —
 `fundus service install` includes it as the `<prefix>.serve` job (see *Service jobs*).
+The server reads the config once at startup: restart it after adding or removing
+sources, or its `sources`/`locate` tools keep answering from the old config.
 
 To point a client at it, `fundus connect` prints ready-to-paste registrations
 (OpenClaw, Claude Code, or a generic JSON stanza) with the endpoint and token

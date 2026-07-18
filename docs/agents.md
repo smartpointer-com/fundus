@@ -29,6 +29,12 @@ The server binds only a search-scoped Meilisearch key (never the admin key) and
 cannot mutate the index. Host, port, and transport live under `[serve]` in
 `fundus.toml`.
 
+The server reads `fundus.toml` **once, at startup**. After adding or removing a
+source, restart it — otherwise the `sources` tool (and `locate`) keeps
+answering from the old config, while `search` already reflects the index. With
+the launchd job that is `sudo launchctl kickstart -k system/<prefix>.serve`;
+with the systemd unit below, `systemctl --user restart fundus-serve`.
+
 To keep it running:
 
 - **macOS** — `fundus service install` includes it as the `<prefix>.serve`

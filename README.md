@@ -29,7 +29,6 @@ sources ──▶ extraction (engine-agnostic) ──▶ chunking ──▶ Meil
 - The indexer writes with an admin key; **consumers search with a read-only key**.
 
 See [docs/architecture.md](docs/architecture.md) for the full design,
-[docs/implementation-plan.md](docs/implementation-plan.md) for the build phases,
 [docs/decisions.md](docs/decisions.md) for the rationale behind the major
 choices, and [docs/deployment.md](docs/deployment.md) for where to keep
 machine-specific setup notes.
@@ -126,10 +125,16 @@ file so it knows your environment without leaking it into the repository. See
 
 The pipeline is implemented end-to-end, unit-tested (`ruff` + `mypy --strict`
 clean), and validated against live services on a real corpus. Beyond the core it
-adds an escalating extraction router (tika-first, docling for scans), fan-out
-embedding with a reusable vector cache, and indexing of email/WhatsApp document
-attachments. See the [implementation plan](docs/implementation-plan.md) for the
-build phases and the [decision record](docs/decisions.md) for rationale.
+adds an escalating extraction router (tika-first, docling for scans, forced OCR
+as a last rung), fan-out embedding with a reusable vector cache, and indexing of
+email/chat document attachments.
+
+Roadmap: a client-side reranker after hybrid retrieval; media transcription
+(voice notes, image captioning); semantic chat segmentation over the window
+heuristics; a real tokenizer for chunk budgets (chars/4 heuristic today);
+integration tests against live services. Note before publishing to a package
+index: the bare name `fundus` is taken by an unrelated package on at least one
+index.
 
 ## Development
 

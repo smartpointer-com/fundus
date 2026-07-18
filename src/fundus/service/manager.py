@@ -18,7 +18,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from fundus.service.spec import Job, Kind, Plan
+from fundus.service.spec import FULL_SUFFIX, INDEX_SUFFIX, SERVE_SUFFIX, Job, Kind, Plan
 
 DAEMON_DIR = Path("/Library/LaunchDaemons")
 
@@ -92,7 +92,7 @@ def plist_path(kind: Kind, label: str, home: Path) -> Path:
 
 def all_labels(label_prefix: str) -> list[str]:
     """Every label fundus may install: the two index jobs and the serve daemon."""
-    return [f"{label_prefix}.index", f"{label_prefix}.index-full", f"{label_prefix}.serve"]
+    return [label_prefix + s for s in (INDEX_SUFFIX, FULL_SUFFIX, SERVE_SUFFIX)]
 
 
 def detect_kind(label_prefix: str, home: Path) -> Kind | None:

@@ -38,7 +38,6 @@ class TextPayload(BaseModel):
 
     kind: Literal["text"] = "text"
     text: str
-    content_type: str = "text/plain"  # or "text/markdown"
 
 
 class BlobPayload(BaseModel):
@@ -47,7 +46,6 @@ class BlobPayload(BaseModel):
     kind: Literal["blob"] = "blob"
     path: str | None = None  # local path, if available
     data: bytes | None = None  # or inline bytes
-    sha256: str | None = None
 
 
 Payload = TextPayload | BlobPayload
@@ -86,8 +84,6 @@ class SourceItem(BaseModel):
 
 
 class TableData(BaseModel):
-    rows: list[list[str]] = Field(default_factory=list)
-    header_rows: int = 0
     markdown: str = ""
 
 
@@ -110,7 +106,6 @@ class Block(BaseModel):
     text: str = ""
     level: int | None = None  # heading level
     page: int | None = None
-    bbox: tuple[float, float, float, float] | None = None
     table: TableData | None = None
 
 
@@ -121,13 +116,8 @@ class EngineRef(BaseModel):
 
 class DocMeta(BaseModel):
     title: str | None = None
-    authors: list[str] = Field(default_factory=list)
-    created: datetime | None = None
-    modified: datetime | None = None
     languages: list[str] = Field(default_factory=list)
-    page_count: int | None = None
     ocr_used: bool = False
-    extra: dict[str, Any] = Field(default_factory=dict)
 
 
 class ExtractionResult(BaseModel):

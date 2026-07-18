@@ -1,6 +1,6 @@
 """Normalize raw engine output (Markdown or plain text) into Blocks.
 
-Engine adapters that emit Markdown (docling, MinerU) call ``markdown_to_blocks``;
+Engine adapters that emit Markdown (docling) call ``markdown_to_blocks``;
 adapters that emit only flat text (Tika) call ``text_to_blocks``. Keeping this
 here means the chunker sees one structural model regardless of engine.
 """

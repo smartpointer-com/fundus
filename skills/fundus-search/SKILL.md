@@ -31,7 +31,7 @@ These are the three read-only tools of the `fundus` MCP server. If you have
 shell access instead of MCP, the same three calls are available as
 `fundus-client query|sources|locate`.
 
-### `search(query, limit=10, semantic_ratio=0.5, filters=None)`
+### `search(query, limit=20, semantic_ratio=0.5, filters=None)`
 Ranked hits, grouped by parent artifact (one row per email/chat/file, not per
 chunk). Each hit carries:
 - `source`, `item_kind` — which corpus and what kind of item

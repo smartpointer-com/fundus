@@ -42,11 +42,11 @@ for agents. It is organized around two plugin families — **sources** and
 
 ```
 src/fundus/
-  cli.py            Typer app: init | index | query | serve | sources | paths | service | embed-backfill | bakeoff
+  cli.py            Typer app: init | index | query | connect | serve | sources | paths | service | embed-backfill | bakeoff
   service/          launchd job generation + management (index jobs + the MCP serve daemon)
   config.py         configuration model + loader (TOML + env)
   models.py         domain models (SourceItem, ExtractionResult/Block, Chunk, IndexDocument)
-  log.py            structured logging
+  render.py         shared search-result rendering (used by `query` and fundus-client)
   core/             pipeline, parallel worker pool, state (cursors), ids, reconcile (deletions)
   sources/          base.Source + notmuch / wacli / files connectors + registry
   extract/          base.Extractor + docling / tika adapters + escalating router + cache + registry
@@ -55,7 +55,7 @@ src/fundus/
   embed/            embedder config (REST or fan-out userProvided) + fan-out client + vector cache
   serve/            read-only MCP server (search/sources/locate tools) + bearer-token gate
   client/           fundus-client: thin MCP client for humans/scripts (a second console script)
-  bakeoff/          extraction-engine comparison harness (+ optional LLM judge)
+  bakeoff/          extraction-engine comparison harness
 docker/compose.yml  Meilisearch + extraction engines
 config/fundus.example.toml
 docs/
@@ -199,8 +199,8 @@ corpus-dependent, so it is deliberately swappable:
   engines' outputs for the same file coexist — enabling honest A/B and ensuring
   re-chunking never re-extracts (never re-OCRs).
 - `bakeoff/` runs the engines over a representative sample and reports
-  (table fidelity, reading order, OCR, speed; optional LLM judge) so the default
-  engine is chosen **empirically** on the target corpus.
+  (characters, tables, speed, failures) so the default engine is chosen
+  **empirically** on the target corpus.
 
 ## Chunking strategy
 
@@ -287,11 +287,11 @@ that fires mid-full simply skips.
 
 ## Dependencies
 
-**Runtime:** `typer` (CLI), `pydantic` + `pydantic-settings` (models/config),
-`httpx` (+ `tenacity`) for extractor calls, `meilisearch` (official client),
-`tokenizers` (chunk budgets), `selectolax` (email HTML→text),
-`python-calamine` (spreadsheets), `puremagic` (mime sniffing), `structlog`,
-`mcp` (serve). Standard library covers `sqlite3` (chat db, cache), `subprocess`
+**Runtime:** `typer` (CLI), `pydantic` (models/config), `httpx` (extractor and
+embedder calls), `meilisearch` (official client), `selectolax` (email
+HTML→text), `markdown-it-py` (Markdown→blocks), `python-calamine`
+(spreadsheets), `puremagic` (mime sniffing), `structlog`, `mcp` + `uvicorn`
+(serve). Standard library covers `sqlite3` (chat db, caches), `subprocess`
 (notmuch JSON), hashing, and TOML.
 
 Deliberately **absent** from the orchestrator: any ML framework. All heavy

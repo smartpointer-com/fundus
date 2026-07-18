@@ -81,3 +81,30 @@ the priority work (extraction bake-off, chunking and index-quality iteration,
 LLM-judging) is most ergonomic in Python — which also has the mature client
 libraries needed (Meilisearch, MCP) and pushes all heavy ML behind the
 service boundary, so the usual "compiled single binary" advantage is moot.
+
+## 11. Chat windowing lives in the chunker
+
+The `ChatChunker` reads a chat's messages from `SourceItem.extra["messages"]`
+(the wacli source prepares that per-chat batch); each window's message ids,
+participants, and time span ride in `Chunk.meta`. Windowing is a chunking
+concern, so chat-shaped sources stay simple emitters.
+
+## 12. Text files bypass the extraction engines
+
+`text/*` files (and Markdown/HTML) are read natively; only binary documents
+(PDF/Office) go to docling/tika, and tabular files (`text/csv`, spreadsheets) go
+straight to the tabular chunker. No engine round-trip for content that is
+already text.
+
+## 13. One `locales` setting
+
+A single top-level config value drives both the index's `localizedAttributes`
+and the default OCR languages — the corpus's languages are one fact, declared
+once.
+
+## 14. XDG config, one data root
+
+The config file follows `XDG_CONFIG_HOME` (`~/.config/fundus.toml`); all
+runtime data is consolidated under one configurable root (`[storage].data_dir`,
+default `$XDG_DATA_HOME/fundus`): `meili/`, `cache/`, `state/`. `fundus paths`
+reports the resolved locations.

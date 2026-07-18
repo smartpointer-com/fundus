@@ -12,7 +12,7 @@ import typer
 
 from fundus.config import FundusConfig, default_config_path, load_config
 from fundus.service import manager
-from fundus.service.spec import Kind, Plan, parse_hhmm
+from fundus.service.spec import FULL_SUFFIX, INDEX_SUFFIX, SERVE_SUFFIX, Kind, Plan, parse_hhmm
 
 service_app = typer.Typer(
     no_args_is_help=True, help="Install/manage the launchd jobs: periodic indexing + the MCP server."
@@ -51,8 +51,8 @@ def _prefix(label_prefix: str | None, cfg: FundusConfig) -> str:
 def _job_label(prefix: str, *, full: bool, serve: bool) -> str:
     """Resolve which job a restart/run/target flag refers to (serve wins, then full, else index)."""
     if serve:
-        return f"{prefix}.serve"
-    return f"{prefix}.index-full" if full else f"{prefix}.index"
+        return prefix + SERVE_SUFFIX
+    return prefix + (FULL_SUFFIX if full else INDEX_SUFFIX)
 
 
 @service_app.command()

@@ -1,7 +1,6 @@
 """Approximate token counting for chunk budgeting.
 
-A fast heuristic (~4 chars/token) by default — good enough for sizing chunks.
-Install the ``tokenize`` extra and plug a real tokenizer for exact counts.
+A fast heuristic (~4 chars/token) — good enough for sizing chunks.
 """
 
 from __future__ import annotations

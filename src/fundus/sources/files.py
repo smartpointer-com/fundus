@@ -19,7 +19,6 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fundus.core.ids import content_sha256
 from fundus.core.mime import guess_mime
 from fundus.models import BlobPayload, Cursor, FileStat, SourceItem
 
@@ -84,7 +83,7 @@ class FilesSource:
             size=st.st_size,
             mtime=st.st_mtime,
             ts=datetime.fromtimestamp(st.st_mtime, tz=UTC),
-            payload=BlobPayload(path=str(path), data=data, sha256=content_sha256(data)),
+            payload=BlobPayload(path=str(path), data=data),
         )
 
     def changed(self, cursor: Cursor | None) -> Iterator[SourceItem]:

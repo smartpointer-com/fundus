@@ -80,6 +80,13 @@ class Job:
         return plist
 
 
+# Job-label suffixes appended to the configured prefix; the single source for every
+# place a label is built (Plan, manager.all_labels, the CLI's job routing).
+INDEX_SUFFIX = ".index"
+FULL_SUFFIX = ".index-full"
+SERVE_SUFFIX = ".serve"
+
+
 @dataclass(frozen=True)
 class Plan:
     """Everything needed to render the jobs for one install."""
@@ -99,15 +106,15 @@ class Plan:
 
     @property
     def incremental_label(self) -> str:
-        return f"{self.label_prefix}.index"
+        return self.label_prefix + INDEX_SUFFIX
 
     @property
     def full_label(self) -> str:
-        return f"{self.label_prefix}.index-full"
+        return self.label_prefix + FULL_SUFFIX
 
     @property
     def serve_label(self) -> str:
-        return f"{self.label_prefix}.serve"
+        return self.label_prefix + SERVE_SUFFIX
 
     def _common(self) -> dict[str, Any]:
         common: dict[str, Any] = {

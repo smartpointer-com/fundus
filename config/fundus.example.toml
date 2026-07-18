@@ -90,13 +90,7 @@ db   = "/path/to/whatsapp.db"    # a wacli-shaped SQLite message store (opened r
 # e.g. a Slack archive exposing a compatible view — plugs in with config alone:
 # table     = "messages_flat"
 # text_cols = ["text"]
-# tags      = ["slack", "attachment"]   # stamped on shared-document items (default: whatsapp)
-
-[sources.window]
-target_tokens  = 512
-max_tokens     = 1024
-overlap        = 2
-soft_gap_hours = 24
+# tags      = ["slack", "attachment"]   # stamped on shared-document items (default: ["whatsapp", "attachment"])
 
 [[sources]]
 name  = "documents"

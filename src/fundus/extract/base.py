@@ -1,6 +1,6 @@
 """The Extractor interface — one adapter per extraction engine.
 
-Adapters hide the concrete transport (REST/gRPC) and engine-specific quirks
+Adapters hide the concrete transport and engine-specific quirks
 behind a single ``extract`` call that returns a normalized ``ExtractionResult``.
 This keeps the engine choice swappable and A/B-testable.
 """

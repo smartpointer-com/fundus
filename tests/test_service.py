@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,13 @@ from fundus.service import manager
 from fundus.service.spec import Plan, fundus_command, parse_hhmm
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def _pretend_darwin(monkeypatch):
+    # `fundus service` is gated to macOS, but everything under test here is a pure
+    # data transform or fully mocked — lift the gate so the suite runs on Linux CI.
+    monkeypatch.setattr(sys, "platform", "darwin")
 
 
 def _plan(kind="agent", **kw):

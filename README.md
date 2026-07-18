@@ -151,4 +151,4 @@ CLIs on your PATH via `pipx`, independent of this tree. Contributors want `make 
 
 ## License
 
-To be determined.
+[MIT](LICENSE) — Copyright (c) 2026 SmartPointer AG.

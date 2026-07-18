@@ -4,9 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fundus"
-version = "0.0.0"
+version = "0.1.0"
 description = "Pluggable toolkit for indexing a heterogeneous corpus (email, chat, documents) into Meilisearch for full-text and hybrid semantic search."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "SmartPointer AG" }]
 requires-python = ">=3.11"
 dependencies = [

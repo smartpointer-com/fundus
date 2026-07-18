@@ -3,7 +3,7 @@ from datetime import datetime
 import httpx
 import pytest
 
-from fundus.config import FundusConfig
+from fundus.config import FundusConfig, SourceConfig
 from fundus.core.ids import parent_id
 from fundus.core.pipeline import Pipeline, to_extraction
 from fundus.extract.base import ExtractOptions
@@ -394,3 +394,33 @@ def test_full_tree_reconcile_allows_bounded_prune():
         FakeTreeSource("docs", disk), full=True
     )
     assert len(sink.deleted_parents[0]) == 200
+
+
+def test_index_contains_a_failing_source_and_still_runs_the_rest(monkeypatch):
+    # A source that blows up before yielding its first item (e.g. an unparseable cursor)
+    # must not freeze the cursors of every source configured after it.
+    cfg = FundusConfig(sources=[
+        SourceConfig(name="mail", type="x"),
+        SourceConfig(name="slack", type="x"),
+        SourceConfig(name="documents", type="x"),
+    ])
+
+    class Exploding(FakeSource):
+        def changed(self, cursor):
+            raise ValueError("invalid literal for int() with base 10: '1700000000.123456'")
+
+    def fake_build(source_cfg):
+        if source_cfg.name == "slack":
+            return Exploding("slack", [])
+        return FakeSource(source_cfg.name, [_item(source=source_cfg.name, payload=TextPayload(text="hi"))])
+
+    monkeypatch.setattr("fundus.core.pipeline.build_source", fake_build)
+    state = DictState()
+    pipeline = Pipeline(cfg, FakeSink(), FakeExtractor(), DictCache(), state, batch_size=2)
+    report = pipeline.index()
+
+    assert set(report.counts) == {"mail", "documents"}  # both sides of the failure ran
+    assert list(report.failures) == ["slack"]
+    assert "1700000000.123456" in report.failures["slack"]
+    assert state.get_cursor("documents") == "C1"  # the source *after* the failure advanced
+    assert state.get_cursor("slack") is None  # the broken one did not

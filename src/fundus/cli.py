@@ -55,14 +55,20 @@ def index(
         cfg.workers = workers
     try:
         with run_lock(str(cfg.lock_path())):
-            counts = build_pipeline(cfg).index(
+            report = build_pipeline(cfg).index(
                 only=only, full=full, force=force, allow_mass_delete=allow_mass_delete
             )
     except AlreadyRunning:
         typer.echo("Another fundus run holds the lock; skipping.")
         raise typer.Exit(code=0) from None
-    for name, n in counts.items():
+    for name, n in report.counts.items():
         typer.echo(f"{name}: {n} chunks")
+    for name, error in report.failures.items():
+        typer.echo(f"{name}: FAILED — {error}", err=True)
+    if report.failures:
+        # Exit non-zero so the failure is visible in launchd's LastExitStatus; the sources
+        # that did run have already committed their cursors, so a retry is cheap.
+        raise typer.Exit(code=1)
 
 
 @app.command()

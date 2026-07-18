@@ -97,7 +97,10 @@ class WacliSource:
         return f" AND ({self._where})" if self._where else ""
 
     def changed(self, cursor: Cursor | None) -> Iterator[SourceItem]:
-        since = int(cursor) if cursor else 0
+        # Float, not int: `ts` is whatever the backing store uses. wacli's own is INTEGER
+        # seconds, but a wacli-shaped view over another store (a Slack archive's float
+        # ts_epoch) carries sub-second precision, and int() would reject its own cursor.
+        since = float(cursor) if cursor else 0.0
         conn = self._connect()
         try:
             row = conn.execute(f"SELECT MAX({self._ts}) FROM {self._t}").fetchone()
@@ -117,7 +120,7 @@ class WacliSource:
         finally:
             conn.close()
 
-    def _media_items(self, conn: sqlite3.Connection, since: int) -> Iterator[SourceItem]:
+    def _media_items(self, conn: sqlite3.Connection, since: float) -> Iterator[SourceItem]:
         """Emit a file item per shared *document* (PDF/spreadsheet/etc.), analogous to an email
         attachment — routed through the binary-extraction pipeline. Images/video/audio are skipped
         (media_type filter), and only messages whose media was downloaded locally are emitted.

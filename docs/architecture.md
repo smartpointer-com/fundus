@@ -224,6 +224,13 @@ lock-guarded JSON state file and bound *what is read*: `source.changed(cursor)`
 yields only items new or modified since the last run, so an unchanged email or
 file is never re-read. `--force` ignores the cursor and re-reads the whole corpus.
 
+**Failures are contained per source.** A source that raises before yielding its
+first item — an unreadable store, an unparseable cursor — is logged, recorded in
+the run's report, and skipped; the remaining sources still index and still advance
+their own cursors. Only the broken source's cursor stays put. The run then exits
+non-zero, so a partial pass is visible in launchd's `LastExitStatus` instead of
+quietly leaving one source frozen.
+
 **No duplicates.** Document ids are content-free and deterministic
 (`hash(source, native_id, chunk_seq)`), so when an item *is* re-read — because it
 changed, under `--force`, or during a `--full` reconcile — it produces the same

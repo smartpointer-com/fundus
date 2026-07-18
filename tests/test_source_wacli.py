@@ -149,3 +149,18 @@ def test_wacli_media_can_be_disabled(tmp_path):
     _add_message(db, ("9", "chatA", "Alice", 1700000300, "Alice", None, None, None,
                       "document", "x.pdf", "application/pdf", "/p/x.pdf"))
     assert all(i.item_kind != "file" for i in _src(db, media=False).changed(None))
+
+
+def test_wacli_accepts_a_fractional_cursor(tmp_path):
+    # A wacli-shaped view over another store (a Slack archive's float ts_epoch) yields a
+    # fractional cursor; the connector must be able to read back its own cursor.
+    db = tmp_path / "w.db"
+    _make_db(db)
+    _add_message(db, ("9", "chatC", "Carol", 1700000300.5, "Carol", "later", None, None,
+                      None, None, None, None))
+    src = _src(db)
+    list(src.changed(None))
+    cursor = src.current_cursor()
+    assert "." in cursor  # a float MAX(ts) round-trips as a fractional string
+    assert [i.native_id for i in _src(db).changed(cursor)] == []
+    assert [i.native_id for i in _src(db).changed("1700000200.5")] == ["chatC"]

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterable
+from dataclasses import dataclass, field
 
 import httpx
 import structlog
@@ -86,6 +87,17 @@ def to_extraction(
     return extract_with_cache(extractor, cache, req)
 
 
+@dataclass
+class IndexReport:
+    """Outcome of one ``index`` run: chunks written per source, plus any source that failed
+    outright. Failures are collected rather than raised so the remaining sources still run;
+    the caller is expected to surface them (a silent partial run is how a stuck source goes
+    unnoticed for days)."""
+
+    counts: dict[str, int] = field(default_factory=dict)
+    failures: dict[str, str] = field(default_factory=dict)
+
+
 class Pipeline:
     def __init__(
         self,
@@ -129,15 +141,22 @@ class Pipeline:
         full: bool = False,
         force: bool = False,
         allow_mass_delete: bool = False,
-    ) -> dict[str, int]:
-        counts: dict[str, int] = {}
+    ) -> IndexReport:
+        report = IndexReport()
         for cfg in self._config.sources:
             if only and cfg.name != only:
                 continue
-            counts[cfg.name] = self.index_source(
-                build_source(cfg), full=full, force=force, allow_mass_delete=allow_mass_delete
-            )
-        return counts
+            # One broken source must not abort the whole index — same rule as _process_item
+            # applies one level up. Without this, a source that fails before yielding its
+            # first item silently freezes the cursor of every source configured below it.
+            try:
+                report.counts[cfg.name] = self.index_source(
+                    build_source(cfg), full=full, force=force, allow_mass_delete=allow_mass_delete
+                )
+            except Exception as exc:  # noqa: BLE001 - one bad source must not abort the rest
+                log.error("source failed", source=cfg.name, error=str(exc))
+                report.failures[cfg.name] = str(exc)
+        return report
 
     def _embed(self, docs: list[IndexDocument]) -> None:
         """Fan-out: compute each doc's vector via the embedder, cache-first. Runs inside the worker

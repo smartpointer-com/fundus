@@ -5,6 +5,14 @@ from fundus.cli import app
 runner = CliRunner()
 
 
+class _StubPipeline:
+    def __init__(self, report):
+        self._report = report
+
+    def index(self, **kw):
+        return self._report
+
+
 def test_cli_sources(tmp_path):
     f = tmp_path / "fundus.toml"
     f.write_text(
@@ -125,3 +133,31 @@ def test_cli_paths_meili_data_is_machine_readable(tmp_path):
     result = runner.invoke(app, ["paths", "--meili-data", "--config", str(f)])
     assert result.exit_code == 0
     assert result.output.strip() == str(tmp_path / "store" / "meili")  # bare path for `make up`
+
+
+def test_cli_index_exits_nonzero_when_a_source_fails(tmp_path, monkeypatch):
+    # Partial success must still be visible to launchd (LastExitStatus), or a stuck
+    # source goes unnoticed indefinitely.
+    from fundus.core.pipeline import IndexReport
+
+    report = IndexReport(counts={"mail": 7}, failures={"slack": "bad cursor"})
+    monkeypatch.setattr("fundus.cli.build_pipeline", lambda cfg: _StubPipeline(report))
+    f = tmp_path / "fundus.toml"
+    f.write_text('[[sources]]\nname = "mail"\ntype = "notmuch"\n')
+    result = runner.invoke(app, ["index", "--config", str(f)])
+    assert result.exit_code == 1
+    assert "mail: 7 chunks" in result.output
+    assert "slack: FAILED — bad cursor" in result.output
+
+
+def test_cli_index_exits_zero_when_all_sources_succeed(tmp_path, monkeypatch):
+    from fundus.core.pipeline import IndexReport
+
+    monkeypatch.setattr(
+        "fundus.cli.build_pipeline", lambda cfg: _StubPipeline(IndexReport(counts={"mail": 7}))
+    )
+    f = tmp_path / "fundus.toml"
+    f.write_text('[[sources]]\nname = "mail"\ntype = "notmuch"\n')
+    result = runner.invoke(app, ["index", "--config", str(f)])
+    assert result.exit_code == 0
+    assert "FAILED" not in result.output

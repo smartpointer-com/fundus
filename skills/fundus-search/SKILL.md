@@ -31,7 +31,7 @@ These are the three read-only tools of the `fundus` MCP server. If you have
 shell access instead of MCP, the same three calls are available as
 `fundus-client query|sources|locate`.
 
-### `search(query, limit=20, semantic_ratio=0.5, filters=None)`
+### `search(query, limit=20, semantic_ratio=0.5, source=None, item_kind=None, since=None, until=None, filters=None)`
 Ranked hits, grouped by parent artifact (one row per email/chat/file, not per
 chunk). Each hit carries:
 - `source`, `item_kind` — which corpus and what kind of item
@@ -41,11 +41,15 @@ chunk). Each hit carries:
 Tuning:
 - `semantic_ratio`: 0 = keyword only (exact names, IDs, codes),
   1 = pure semantic (vague/conceptual), 0.5 = blend. Start at 0.5.
-- `filters`: a Meilisearch filter over `source`, `item_kind`, `ts`, `actors`,
-  `tags`, `path`, `mime`, `lang`. Examples:
-  - `source = "mail"`
-  - `tags = "attachment" AND ts > 1735689600`
-  Use source names exactly as `sources` reports them.
+- **Narrowing — prefer the typed parameters** (no filter syntax to get wrong):
+  - `source`: one source name, e.g. `"mail"` (call `sources` for exact names).
+  - `item_kind`: e.g. `"file"`, `"email"`, `"chat_window"`.
+  - `since` / `until`: Unix epoch seconds, bounding `ts`.
+- `filters`: only for advanced expressions, ANDed with the above. It is a raw
+  **Meilisearch** filter — `field = "value"`, `field IN ["a","b"]`,
+  `ts > 1735689600` — **never** `field:value` (no colons). Filterable fields:
+  `source`, `item_kind`, `ts`, `actors`, `tags`, `path`, `mime`, `lang`.
+  Example: `tags = "attachment" AND ts > 1735689600`.
 
 ### `sources()`
 Lists each configured source: name, type, corpus location, and indexed

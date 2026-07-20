@@ -170,6 +170,18 @@ def test_ensure_docling_command_keeps_absolute_and_rejects_empty(tmp_path):
         manager.ensure_docling_command([])
 
 
+def test_wait_until_gone_polls_until_service_absent(monkeypatch):
+    import types
+
+    # bootout returns before a busy daemon exits; _wait_until_gone must poll `launchctl print`
+    # until the label reports gone (rc != 0) before install re-bootstraps it — else the two race.
+    seq = [0, 0, 3]  # registered, registered, then gone
+    monkeypatch.setattr(manager, "_run", lambda *a, **k: types.SimpleNamespace(returncode=seq.pop(0)))
+    monkeypatch.setattr(manager.time, "sleep", lambda _s: None)
+    manager._wait_until_gone("system/fundus.serve", sudo=True, timeout=5)
+    assert seq == []  # polled through both "still registered" results, stopped on "gone"
+
+
 # --- binary validation ----------------------------------------------------------------------
 
 

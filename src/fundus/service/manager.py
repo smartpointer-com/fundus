@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from fundus.service.spec import (
@@ -143,6 +144,19 @@ def _run(cmd: list[str], *, sudo: bool, check: bool = True, capture: bool = Fals
     return subprocess.run(argv, check=check, text=True, capture_output=capture)
 
 
+def _wait_until_gone(target: str, *, sudo: bool, timeout: float = 10.0) -> None:
+    """Wait for launchd to finish tearing a service down after ``bootout``, before re-bootstrapping.
+    ``launchctl bootout`` returns before a busy daemon's graceful shutdown completes, so an immediate
+    ``bootstrap`` can race the drain and fail — which stranded the actively-serving MCP daemon on a
+    reinstall. Poll until the label is no longer registered, bounded by ``timeout`` (then proceed
+    anyway; the bootstrap itself still surfaces a real error)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _run(["launchctl", "print", target], sudo=sudo, check=False, capture=True).returncode != 0:
+            return  # no longer registered
+        time.sleep(0.25)
+
+
 # --- Operations -------------------------------------------------------------------------------
 
 
@@ -165,7 +179,7 @@ def _write_plist(job: Job, kind: Kind, home: Path) -> Path:
 
 
 def install(plan: Plan) -> list[str]:
-    """Write both plists and (re)bootstrap them. Returns the labels installed."""
+    """Write each job's plist and (re)bootstrap it. Returns the labels installed."""
     Path(plan.logs_dir).mkdir(parents=True, exist_ok=True)
     uid = os.getuid()
     kind = plan.kind
@@ -175,8 +189,10 @@ def install(plan: Plan) -> list[str]:
         dest = _write_plist(job, kind, Path(plan.home))
         target = f"{domain_target(kind, uid)}/{job.label}"
         # Idempotent: bootout any previous incarnation first, then bootstrap. capture=True swallows
-        # the expected "No such process" on a first install (nothing loaded to boot out).
+        # the expected "No such process" on a first install (nothing loaded to boot out). Wait for a
+        # busy daemon to finish draining before re-bootstrapping, or the two race (see _wait_until_gone).
         _run(["launchctl", "bootout", target], sudo=sudo, check=False, capture=True)
+        _wait_until_gone(target, sudo=sudo)
         _run(["launchctl", "bootstrap", domain_target(kind, uid), str(dest)], sudo=sudo)
         labels.append(job.label)
     return labels

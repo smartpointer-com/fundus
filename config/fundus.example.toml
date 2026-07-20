@@ -53,8 +53,9 @@ model = "qwen3-embedding"
 #                          # instruct prefix for QUERIES only (models like Qwen3-Embedding); empty = symmetric
 # fanout = true            # Fundus computes document vectors itself (concurrently) and stores them via a
 #                          # userProvided embedder, bypassing Meili's one-request-at-a-time REST path — a big
-#                          # win on a heavy model. Needs `dimensions` and a `query_prompt`. A SQLite vector
-#                          # cache then makes re-indexes cheap (seed it once with `fundus embed-backfill`).
+#                          # win on a heavy model. Needs `dimensions`; set `query_prompt` too for instruct
+#                          # models (empty = symmetric). A SQLite vector cache then makes re-indexes cheap
+#                          # (seed it once with `fundus embed-backfill`).
 
 [extractor]
 default = "docling-serve"        # or "escalate" (below); the cache is keyed per engine

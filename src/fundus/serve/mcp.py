@@ -10,19 +10,62 @@ the logic (testable); ``build_mcp``/``run_server`` wire them to the transport.
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Annotated, Any
+
+from pydantic import Field
 
 from fundus.config import FundusConfig
 from fundus.core.pipeline import build_search_sink
 
 
+def _compile_filter(
+    source: str | None, item_kind: str | None, since: int | None, until: int | None, filters: str | None
+) -> str | None:
+    """Combine the typed convenience params and any raw expression into one Meilisearch filter
+    (ANDed). The typed params spare the caller from writing Meili's filter DSL for the common cases;
+    the failure they prevent is a model reaching for ``source:mail`` (Lucene) instead of Meili's
+    ``source = "mail"``."""
+    clauses: list[str] = []
+    if source:
+        clauses.append(f'source = "{source}"')
+    if item_kind:
+        clauses.append(f'item_kind = "{item_kind}"')
+    if since is not None:
+        clauses.append(f"ts >= {int(since)}")
+    if until is not None:
+        clauses.append(f"ts <= {int(until)}")
+    if filters:
+        clauses.append(f"({filters})")
+    return " AND ".join(clauses) or None
+
+
 def search_tool(
-    sink: Any, query: str, *, limit: int = 20, semantic_ratio: float = 0.5, filters: str | None = None
+    sink: Any,
+    query: str,
+    *,
+    limit: int = 20,
+    semantic_ratio: float = 0.5,
+    source: str | None = None,
+    item_kind: str | None = None,
+    since: int | None = None,
+    until: int | None = None,
+    filters: str | None = None,
 ) -> list[dict[str, Any]]:
     """Hybrid search; returns artifacts grouped by parent, each with ref/path/ts/score/snippet."""
-    results: list[dict[str, Any]] = sink.search(
-        query, semantic_ratio=semantic_ratio, filters=filters, limit=limit
-    )
+    combined = _compile_filter(source, item_kind, since, until, filters)
+    try:
+        results: list[dict[str, Any]] = sink.search(
+            query, semantic_ratio=semantic_ratio, filters=combined, limit=limit
+        )
+    except Exception as exc:  # noqa: BLE001 - turn a bad filter into self-correcting guidance
+        if combined and "filter" in str(exc).lower():
+            raise ValueError(
+                f"invalid filter {combined!r}. Use Meilisearch syntax — "
+                'source = "mail", item_kind IN ["file","email"], ts > 1735689600 — not '
+                "`field:value`. Simpler: pass the source / item_kind / since / until parameters "
+                "instead of a raw filter."
+            ) from exc
+        raise
     return results
 
 
@@ -71,11 +114,36 @@ def build_mcp(sink: Any, config: FundusConfig) -> Any:
 
     @server.tool()
     def search(
-        query: str, limit: int = 20, semantic_ratio: float = 0.5, filters: str | None = None
+        query: str,
+        limit: int = 20,
+        semantic_ratio: float = 0.5,
+        source: Annotated[str | None, Field(description=(
+            'Restrict to ONE indexed source by name (e.g. "mail", "chat", "documents"); call '
+            "`sources` for the exact names. Compiled to a filter for you — prefer this over `filters`."
+        ))] = None,
+        item_kind: Annotated[str | None, Field(description=(
+            'Restrict to one item kind, e.g. "file", "email", "chat_window".'
+        ))] = None,
+        since: Annotated[int | None, Field(
+            description="Only items at/after this Unix epoch time (seconds)."
+        )] = None,
+        until: Annotated[int | None, Field(
+            description="Only items at/before this Unix epoch time (seconds)."
+        )] = None,
+        filters: Annotated[str | None, Field(description=(
+            "Advanced: a raw Meilisearch filter, ANDed with the params above. Meili syntax only — "
+            'source = "mail", item_kind IN ["file","email"], ts > 1735689600 — NOT `field:value` '
+            "(no colons). Filterable fields: source, item_kind, ts, actors, tags, path, mime, lang."
+        ))] = None,
     ) -> list[dict[str, Any]]:
         """Search the indexed corpus (email, chat, documents). Returns matching artifacts grouped
-        by parent and ranked by hybrid keyword+semantic relevance; each carries a ref/path to open."""
-        return search_tool(sink, query, limit=limit, semantic_ratio=semantic_ratio, filters=filters)
+        by parent and ranked by hybrid keyword+semantic relevance; each carries a ref/path to open.
+        To narrow results, PREFER the typed source/item_kind/since/until parameters; use `filters`
+        only for advanced expressions."""
+        return search_tool(
+            sink, query, limit=limit, semantic_ratio=semantic_ratio,
+            source=source, item_kind=item_kind, since=since, until=until, filters=filters,
+        )
 
     @server.tool()
     def sources() -> list[dict[str, Any]]:

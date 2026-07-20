@@ -19,7 +19,6 @@ class ExtractOptions(BaseModel):
 
     ocr: Literal["auto", "force", "off"] = "auto"
     ocr_languages: list[str] = Field(default_factory=lambda: ["eng"])
-    page_range: tuple[int, int] | None = None
 
 
 class ExtractRequest(BaseModel):

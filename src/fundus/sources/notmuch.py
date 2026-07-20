@@ -1,9 +1,12 @@
 """notmuch email connector.
 
 Shells out to the ``notmuch`` CLI (no bindings): ``count --lastmod`` for the
-revision cursor, ``show --format=json`` for message bodies/headers/tags, and
-``search --output=messages`` for live ids. Incremental via notmuch's
-``lastmod:N..`` revision range.
+revision cursor and ``show --format=json`` for message bodies/headers/tags. Live
+ids (for a ``--full`` reconcile) come from ``search --output=messages`` when
+attachments are disabled; with attachments on (the default) ``show --body=true``
+enumerates message ids plus attachment part ids, and attachment bytes are read
+with ``show --format=raw --part=N``. Incremental via notmuch's ``lastmod:N..``
+revision range.
 """
 
 from __future__ import annotations

@@ -29,11 +29,35 @@ def _config(**sources):
 
 def test_search_tool_delegates_to_sink():
     sink = FakeSink()
-    out = search_tool(sink, "hello", limit=5, semantic_ratio=0.7, filters="source = mail")
+    out = search_tool(sink, "hello", limit=5, semantic_ratio=0.7)
     assert out[0]["parent_id"] == "A"
     assert sink.called_with == {
-        "query": "hello", "semantic_ratio": 0.7, "filters": "source = mail", "limit": 5,
+        "query": "hello", "semantic_ratio": 0.7, "filters": None, "limit": 5,
     }
+
+
+def test_search_tool_compiles_typed_params_into_meili_filter():
+    sink = FakeSink()
+    search_tool(sink, "q", source="mail", item_kind="file", since=1000, until=2000)
+    assert sink.called_with["filters"] == (
+        'source = "mail" AND item_kind = "file" AND ts >= 1000 AND ts <= 2000'
+    )
+
+
+def test_search_tool_ands_raw_filter_with_typed_params():
+    sink = FakeSink()
+    search_tool(sink, "q", source="mail", filters='tags = "attachment"')
+    assert sink.called_with["filters"] == 'source = "mail" AND (tags = "attachment")'
+
+
+def test_search_tool_rewrites_bad_filter_into_guidance():
+    class BadSink:
+        def search(self, *a, **k):
+            raise RuntimeError("invalid_search_filter: expected operator = or IN")
+
+    # a Lucene-style `source:mail` must come back as actionable guidance, not an opaque API error
+    with pytest.raises(ValueError, match="field:value"):
+        search_tool(BadSink(), "q", filters="source:mail")
 
 
 def test_sources_tool_merges_config_and_counts():

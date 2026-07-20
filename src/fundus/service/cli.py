@@ -1,4 +1,5 @@
-"""`fundus service …` — install/manage the launchd jobs: indexing + the MCP server."""
+"""`fundus service …` — install/manage the launchd jobs: indexing, the MCP server, and an
+optional bare-metal docling-serve."""
 
 from __future__ import annotations
 
@@ -12,10 +13,20 @@ import typer
 
 from fundus.config import FundusConfig, default_config_path, load_config
 from fundus.service import manager
-from fundus.service.spec import FULL_SUFFIX, INDEX_SUFFIX, SERVE_SUFFIX, Kind, Plan, parse_hhmm
+from fundus.service.spec import (
+    DOCLING_SUFFIX,
+    FULL_SUFFIX,
+    INDEX_SUFFIX,
+    SERVE_SUFFIX,
+    Kind,
+    Plan,
+    parse_hhmm,
+)
 
 service_app = typer.Typer(
-    no_args_is_help=True, help="Install/manage the launchd jobs: periodic indexing + the MCP server."
+    no_args_is_help=True,
+    help="Install/manage the launchd jobs: periodic indexing, the MCP server, and an optional "
+    "bare-metal docling-serve.",
 )
 
 ConfigOpt = typer.Option(None, "--config", "-c", help="Path to fundus.toml (default: XDG).")
@@ -48,10 +59,12 @@ def _prefix(label_prefix: str | None, cfg: FundusConfig) -> str:
     return label_prefix or cfg.service.label_prefix
 
 
-def _job_label(prefix: str, *, full: bool, serve: bool) -> str:
-    """Resolve which job a restart/run/target flag refers to (serve wins, then full, else index)."""
+def _job_label(prefix: str, *, full: bool, serve: bool, docling: bool = False) -> str:
+    """Resolve which job a restart/run flag refers to (serve, then docling, then full, else index)."""
     if serve:
         return prefix + SERVE_SUFFIX
+    if docling:
+        return prefix + DOCLING_SUFFIX
     return prefix + (FULL_SUFFIX if full else INDEX_SUFFIX)
 
 
@@ -65,20 +78,39 @@ def install(
     ),
     index: bool = typer.Option(True, "--index/--no-index", help="Install the incremental + nightly-full index jobs."),
     serve: bool = typer.Option(True, "--serve/--no-serve", help="Install the long-running read-only MCP server."),
+    docling: bool | None = typer.Option(
+        None, "--docling/--no-docling",
+        help="Install the keep-alive job for a bare-metal docling-serve "
+        "(default: from config [service.docling].enabled).",
+    ),
     interval: int | None = typer.Option(None, help="Incremental cadence in minutes."),
     full_at: str | None = typer.Option(None, help="Nightly full-reconcile time, HH:MM."),
     label_prefix: str | None = typer.Option(None, help="Job label prefix (reverse-DNS)."),
     config: Path | None = ConfigOpt,
 ) -> None:
-    """Generate the plists and (re)bootstrap the jobs: incremental + nightly-full index, and the
-    read-only MCP server (all by default; scope with --no-index / --no-serve)."""
+    """Generate the plists and (re)bootstrap the jobs: incremental + nightly-full index and the
+    read-only MCP server (both by default; scope with --no-index / --no-serve), plus an optional
+    bare-metal docling-serve when [service.docling] is configured (or --docling)."""
     cfg = load_config(config)
     svc = cfg.service
-    if not index and not serve:
-        typer.echo("nothing to install: --no-index and --no-serve can't both be set.", err=True)
+    include_docling = svc.docling.enabled if docling is None else docling
+    # Config asks for docling but supplies no command, and the user didn't explicitly request it on
+    # the CLI: skip the docling job with a warning rather than aborting the whole install (index and
+    # serve are unrelated and shouldn't be blocked by a half-finished [service.docling]).
+    if include_docling and not svc.docling.command and docling is None:
+        typer.echo(
+            "warning: [service.docling].enabled is set but command is empty; skipping the docling job.",
+            err=True,
+        )
+        include_docling = False
+    if not index and not serve and not include_docling:
+        typer.echo("nothing to install: index, serve, and docling are all disabled.", err=True)
         raise typer.Exit(code=1)
     try:
         fundus_bin = manager.ensure_installed_binary()
+        # Validate the launch command before writing a KeepAlive plist, and take back argv[0]
+        # resolved to an absolute path (launchd won't search PATH for a bare command name).
+        docling_command = manager.ensure_docling_command(svc.docling.command) if include_docling else []
         plan = Plan(
             kind="daemon" if daemon else "agent",
             label_prefix=label_prefix or svc.label_prefix,
@@ -92,6 +124,9 @@ def install(
             groupname=grp.getgrgid(os.getgid()).gr_name,
             include_index=index,
             include_serve=serve,
+            include_docling=include_docling,
+            docling_command=docling_command,
+            docling_environment=svc.docling.environment,
         )
         parse_hhmm(plan.full_at)  # validate before doing anything
         if plan.kind == "daemon":
@@ -109,6 +144,8 @@ def install(
     if serve:
         s = cfg.serve
         typer.echo(f"  serve:    {s.transport} on {s.host}:{s.port} (kept alive)")
+    if include_docling:
+        typer.echo(f"  docling:  {' '.join(svc.docling.command)} (kept alive)")
     typer.echo(f"  logs:     {plan.logs_dir}/")
     if cfg.env_file is None:
         # launchd jobs get a near-empty environment; without an env_file fundus can't see secrets.
@@ -125,7 +162,7 @@ def uninstall(
     label_prefix: str | None = typer.Option(None, help="Job label prefix."),
     config: Path | None = ConfigOpt,
 ) -> None:
-    """Bootout and remove all installed jobs (index + serve)."""
+    """Bootout and remove all installed jobs (index + serve + docling)."""
     cfg = load_config(config)
     prefix = _prefix(label_prefix, cfg)
     kind = _kind(daemon, prefix)
@@ -154,15 +191,17 @@ def status(
 def restart(
     full: bool = typer.Option(False, "--full", help="Target the nightly-full job."),
     serve: bool = typer.Option(False, "--serve", help="Target the MCP server (else an index job)."),
+    docling: bool = typer.Option(False, "--docling", help="Target the bare-metal docling-serve job."),
     daemon: bool | None = typer.Option(None, "--daemon/--agent", help="Override autodetected kind."),
     label_prefix: str | None = typer.Option(None, help="Job label prefix."),
     config: Path | None = ConfigOpt,
 ) -> None:
-    """Kill-and-restart a job immediately (kickstart -k) — e.g. the server after a config change."""
+    """Kill-and-restart a job immediately (kickstart -k) — e.g. the server (or docling) after a
+    config change."""
     cfg = load_config(config)
     prefix = _prefix(label_prefix, cfg)
     kind = _kind(daemon, prefix)
-    label = _job_label(prefix, full=full, serve=serve)
+    label = _job_label(prefix, full=full, serve=serve, docling=docling)
     manager.kickstart(label, kind, restart=True)
     typer.echo(f"Restarted {label}.")
 

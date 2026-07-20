@@ -264,19 +264,24 @@ once.
 
 ## Service jobs (`fundus service`)
 
-On macOS, `fundus service install` generates and bootstraps up to three launchd
-jobs (all by default; scope with `--no-index` / `--no-serve`):
+On macOS, `fundus service install` generates and bootstraps up to four launchd
+jobs — index and serve by default, docling opt-in (scope with `--no-index` /
+`--no-serve` / `--docling` / `--no-docling`):
 
 - `<prefix>.index` — incremental indexing (`StartInterval` + `RunAtLoad`).
 - `<prefix>.index-full` — the nightly full reconcile (`StartCalendarInterval` at a
   wall-clock hour).
 - `<prefix>.serve` — the read-only MCP server, a long-running daemon kept up with
   `KeepAlive` + `RunAtLoad`.
+- `<prefix>.docling` — optional (`[service.docling]`): a bare-metal docling-serve
+  kept up with `KeepAlive` + `RunAtLoad`, for Apple Vision OCR the container can't
+  reach. It execs the user's own `[service.docling].command` (with its environment
+  merged over `HOME`/`PATH`), not the fundus binary.
 
 The two index jobs run as throttled **background** batch work (`ProcessType =
-Background`, `LowPriorityIO`); the server runs **unthrottled** so it stays
-responsive. The run-lock makes the index jobs safe to overlap — an incremental
-that fires mid-full simply skips.
+Background`, `LowPriorityIO`); the serve and docling jobs run **unthrottled** so
+they stay responsive. The run-lock makes the index jobs safe to overlap — an
+incremental that fires mid-full simply skips.
 
 - **LaunchAgent (default)** runs in the login session; **`--daemon`** installs a
   LaunchDaemon (via `sudo`) that runs headless at boot — correct only when the

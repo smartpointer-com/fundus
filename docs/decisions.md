@@ -108,3 +108,27 @@ The config file follows `XDG_CONFIG_HOME` (`~/.config/fundus.toml`); all
 runtime data is consolidated under one configurable root (`[storage].data_dir`,
 default `$XDG_DATA_HOME/fundus`): `meili/`, `cache/`, `state/`. `fundus paths`
 reports the resolved locations.
+
+## 15. OCR engine is config, not platform code; Apple Vision runs bare-metal
+
+The extraction engines run in Docker, but a Linux container can reach neither a
+macOS GPU nor Apple's Vision framework — the same wall that keeps the embedding
+model bare-metal. So the container's OCR falls back to a CPU engine (EasyOCR),
+which on a mixed German/English scanned corpus is both slower and weaker
+(strips umlauts, misreads figures) than Apple Vision.
+
+Rather than branch on platform in code, the OCR engine is a single config field,
+`[extractor.engines.docling-serve].ocr_engine`, sent per request (default: unset,
+so docling-serve picks its own — the portable behavior). To use Apple Vision, run
+docling-serve **bare-metal** on the host (like the embedder) and set
+`ocr_engine = "ocrmac"`; the adapter is otherwise unchanged. The rasterization
+resolution that most affects OCR fidelity is not exposed over docling-serve's HTTP
+API, so fundus uses docling's default (216 DPI) — measured as the best single
+value across document types (higher DPI helps dense scans but regresses others,
+non-monotonically), which is the right call for an engine serving a heterogeneous
+corpus.
+
+The bare-metal server's lifecycle is managed as an opt-in `<prefix>.docling`
+launchd job (`[service.docling]`) so one `fundus service install` covers it
+alongside indexing and the MCP server. The launch command and its environment
+stay in the user's config, not the repo — this stays a generic toolkit.

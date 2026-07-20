@@ -91,6 +91,27 @@ def test_include_toggles_select_jobs():
     assert serve_only == ["com.test.fundus.serve"]
 
 
+def test_docling_absent_by_default():
+    assert "com.test.fundus.docling" not in [j.label for j in _plan().jobs()]
+
+
+def test_docling_job_kept_alive_with_command_and_merged_env():
+    plan = _plan(
+        include_docling=True,
+        docling_command=["/venv/bin/docling-serve", "run", "--port", "5001"],
+        docling_environment={"PATH": "/venv/bin:/usr/bin"},
+    )
+    docling = {j.label: j for j in plan.jobs()}["com.test.fundus.docling"]
+    # execs the user's command directly, not the fundus binary
+    assert docling.program_arguments == ["/venv/bin/docling-serve", "run", "--port", "5001"]
+    p = docling.to_plist()
+    assert p["KeepAlive"] is True and p["RunAtLoad"] is True  # a server: stay up
+    assert "ProcessType" not in p  # responsive, not throttled like the index jobs
+    assert p["EnvironmentVariables"]["PATH"] == "/venv/bin:/usr/bin"  # override wins
+    assert p["EnvironmentVariables"]["HOME"] == "/home/u"  # base env preserved
+    assert p["StandardOutPath"] == "/home/u/fundus/logs/docling.log"
+
+
 def test_daemon_jobs_run_as_user_not_root():
     inc = _plan("daemon").jobs()[0].to_plist()
     assert inc["UserName"] == "u" and inc["GroupName"] == "staff"
@@ -118,8 +139,35 @@ def test_plist_paths():
     assert manager.plist_path("agent", "x.index", home) == home / "Library/LaunchAgents/x.index.plist"
 
 
-def test_all_labels_covers_index_and_serve():
-    assert manager.all_labels("com.x") == ["com.x.index", "com.x.index-full", "com.x.serve"]
+def test_all_labels_covers_index_serve_and_docling():
+    assert manager.all_labels("com.x") == [
+        "com.x.index", "com.x.index-full", "com.x.serve", "com.x.docling",
+    ]
+
+
+def test_job_label_routes_to_docling():
+    from fundus.service.cli import _job_label
+
+    assert _job_label("com.x", full=False, serve=False, docling=True) == "com.x.docling"
+    assert _job_label("com.x", full=False, serve=True, docling=True) == "com.x.serve"  # serve wins
+    assert _job_label("com.x", full=True, serve=False, docling=False) == "com.x.index-full"
+    assert _job_label("com.x", full=False, serve=False, docling=False) == "com.x.index"
+
+
+def test_ensure_docling_command_resolves_bare_name_to_absolute():
+    import shutil
+
+    resolved = manager.ensure_docling_command(["sh", "-c", "true"])
+    assert resolved == [shutil.which("sh"), "-c", "true"]  # launchd needs an absolute program path
+
+
+def test_ensure_docling_command_keeps_absolute_and_rejects_empty(tmp_path):
+    exe = tmp_path / "docling-serve"
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    assert manager.ensure_docling_command([str(exe), "run"]) == [str(exe), "run"]
+    with pytest.raises(manager.ServiceError):
+        manager.ensure_docling_command([])
 
 
 # --- binary validation ----------------------------------------------------------------------
@@ -176,3 +224,47 @@ def test_service_install_warns_without_env_file(monkeypatch, tmp_path):
     result = runner.invoke(app, ["service", "install", "--config", str(cfg)])
     assert result.exit_code == 0
     assert "no env_file" in result.output
+
+
+def test_service_install_skips_docling_enabled_without_command(monkeypatch, tmp_path):
+    # A config that enables docling but omits the command must warn and skip — NOT block index/serve.
+    monkeypatch.setattr(manager, "ensure_installed_binary", lambda: Path("/opt/pipx/fundus"))
+    monkeypatch.setattr(manager, "install", lambda plan: [j.label for j in plan.jobs()])
+    cfg = tmp_path / "fundus.toml"
+    cfg.write_text("[service.docling]\nenabled = true\n")  # enabled, no command
+    result = runner.invoke(app, ["service", "install", "--config", str(cfg)])
+    assert result.exit_code == 0
+    assert "skipping the docling job" in result.output
+    assert "fundus.docling" not in result.output
+    assert "fundus.serve" in result.output  # unrelated jobs still installed
+
+
+def test_service_install_explicit_docling_requires_command(monkeypatch, tmp_path):
+    monkeypatch.setattr(manager, "ensure_installed_binary", lambda: Path("/opt/pipx/fundus"))
+    cfg = tmp_path / "fundus.toml"
+    cfg.write_text("")
+    result = runner.invoke(app, ["service", "install", "--docling", "--config", str(cfg)])
+    assert result.exit_code == 1
+    assert "command is empty" in result.output
+
+
+def test_service_install_rejects_unexecutable_docling_command(monkeypatch, tmp_path):
+    monkeypatch.setattr(manager, "ensure_installed_binary", lambda: Path("/opt/pipx/fundus"))
+    cfg = tmp_path / "fundus.toml"
+    cfg.write_text('[service.docling]\nenabled = true\ncommand = ["/no/such/docling-serve", "run"]\n')
+    result = runner.invoke(app, ["service", "install", "--config", str(cfg)])
+    assert result.exit_code == 1
+    assert "not executable" in result.output
+
+
+def test_service_install_includes_docling_with_valid_command(monkeypatch, tmp_path):
+    monkeypatch.setattr(manager, "ensure_installed_binary", lambda: Path("/opt/pipx/fundus"))
+    monkeypatch.setattr(manager, "install", lambda plan: [j.label for j in plan.jobs()])
+    cfg = tmp_path / "fundus.toml"
+    cfg.write_text(
+        f'[service.docling]\nenabled = true\ncommand = ["{sys.executable}", "-m", "http.server"]\n'
+    )
+    result = runner.invoke(app, ["service", "install", "--config", str(cfg)])
+    assert result.exit_code == 0
+    assert "fundus.docling" in result.output
+    assert "docling:" in result.output  # the summary line for the installed job

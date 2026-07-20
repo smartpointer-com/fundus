@@ -1,17 +1,20 @@
 """Pure description of the launchd jobs Fundus installs — no side effects.
 
-Up to three jobs per install: ``<prefix>.index`` (incremental, every N minutes),
+Up to four jobs per install: ``<prefix>.index`` (incremental, every N minutes),
 ``<prefix>.index-full`` (the nightly rsync-style full reconcile, at a wall-clock
-time), and ``<prefix>.serve`` (the long-running read-only MCP server, kept alive).
-Each plist execs the *installed* ``fundus`` binary directly; secrets come from the
-config's ``env_file``, which fundus sources itself at startup, so no secret ever
-lands in the world-readable plist. Everything here is a plain data transform (→ a
-plist dict) to keep it unit-testable without touching launchd.
+time), ``<prefix>.serve`` (the long-running read-only MCP server, kept alive), and
+the optional ``<prefix>.docling`` (a bare-metal docling-serve, kept alive — for
+Apple Vision OCR that the container can't reach). The index/serve/full plists exec
+the *installed* ``fundus`` binary directly; the docling plist execs the user's own
+configured command. Secrets come from the config's ``env_file``, which fundus
+sources itself at startup, so no secret ever lands in the world-readable plist.
+Everything here is a plain data transform (→ a plist dict) to keep it unit-testable
+without touching launchd.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 Kind = Literal["agent", "daemon"]
@@ -85,6 +88,7 @@ class Job:
 INDEX_SUFFIX = ".index"
 FULL_SUFFIX = ".index-full"
 SERVE_SUFFIX = ".serve"
+DOCLING_SUFFIX = ".docling"
 
 
 @dataclass(frozen=True)
@@ -103,6 +107,9 @@ class Plan:
     groupname: str
     include_index: bool = True  # the incremental + nightly-full index jobs
     include_serve: bool = True  # the long-running read-only MCP server
+    include_docling: bool = False  # a keep-alive bare-metal docling-serve (opt-in; needs a command)
+    docling_command: list[str] = field(default_factory=list)
+    docling_environment: dict[str, str] = field(default_factory=dict)
 
     @property
     def incremental_label(self) -> str:
@@ -115,6 +122,10 @@ class Plan:
     @property
     def serve_label(self) -> str:
         return self.label_prefix + SERVE_SUFFIX
+
+    @property
+    def docling_label(self) -> str:
+        return self.label_prefix + DOCLING_SUFFIX
 
     def _common(self) -> dict[str, Any]:
         common: dict[str, Any] = {
@@ -129,6 +140,19 @@ class Plan:
     def jobs(self) -> list[Job]:
         out: list[Job] = []
         common = self._common()
+        if self.include_docling:
+            # A bare-metal docling-serve, kept alive like the MCP server. Execs the user's own
+            # command (not the fundus binary); merges the machine-specific env over HOME/PATH.
+            docling_common = {**common, "environment": {**common["environment"], **self.docling_environment}}
+            out.append(Job(
+                label=self.docling_label,
+                program_arguments=list(self.docling_command),
+                log_path=f"{self.logs_dir}/docling.log",
+                run_at_load=True,
+                keep_alive=True,  # a server: keep it up
+                background=False,  # responsive, not throttled like the batch index jobs
+                **docling_common,
+            ))
         if self.include_index:
             out.append(Job(
                 label=self.incremental_label,

@@ -27,6 +27,9 @@ services:
       - ${FUNDUS_MEILI_DATA:-./data/meili}:/meili_data
 
   # Primary extraction engine (best PDF layout/table fidelity).
+  # On Apple Silicon this container's OCR can't reach Apple Vision or the GPU (same wall as the
+  # embedder), so it uses a CPU engine. For Apple Vision (ocrmac), run docling-serve bare-metal
+  # instead — see docs/deployment.md, "Apple Silicon: OCR via Apple Vision".
   docling-serve:
     image: ghcr.io/docling-project/docling-serve:latest # pin to a current release
     restart: unless-stopped

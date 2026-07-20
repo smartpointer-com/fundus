@@ -57,10 +57,14 @@ class DoclingServeExtractor:
         client: httpx.Client | None = None,
         timeout: float = 600.0,
         max_concurrency: int | None = None,
+        ocr_engine: str | None = None,
     ) -> None:
         self._url = url.rstrip("/")
         self.version = version
         self._client = client or httpx.Client(timeout=timeout)
+        # OCR engine to request per call (e.g. "ocrmac" for Apple Vision on a bare-metal macOS
+        # server). None → omit the field and let docling-serve pick its own default.
+        self._ocr_engine = ocr_engine
         # docling-serve drops queued connections when flooded; bound in-flight requests so the
         # indexing worker pool can be sized for embedding concurrency without overwhelming it.
         self._max_concurrency = max_concurrency
@@ -105,6 +109,8 @@ class DoclingServeExtractor:
         form: dict[str, Any] = {"to_formats": ["md", "json"], "do_ocr": str(do_ocr).lower()}
         if req.options.ocr == "force":
             form["force_ocr"] = "true"
+        if do_ocr and self._ocr_engine:  # else docling-serve uses its own default ("auto")
+            form["ocr_engine"] = self._ocr_engine
         files = {
             "files": (
                 req.filename or "document",

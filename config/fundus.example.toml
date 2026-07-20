@@ -10,6 +10,14 @@
 # interval_minutes = 30    # incremental indexing cadence
 # full_at = "03:00"        # nightly full-reconcile time (HH:MM); set it AFTER your corpus sync finishes
 
+# [service.docling]        # OPTIONAL keep-alive job for a BARE-METAL docling-serve, managed alongside
+# enabled = true           # the index/serve jobs. On Apple Silicon the container can't reach Apple
+# command = ["/path/to/venv/bin/docling-serve", "run", "--host", "127.0.0.1", "--port", "5001"]
+#                          # Vision (ocrmac) or the GPU, so you run docling-serve on the host and
+#                          # point [extractor.engines.docling-serve].url at it. Command/env are yours.
+# [service.docling.environment]
+# PATH = "/path/to/venv/bin:/opt/homebrew/bin:/usr/bin:/bin"   # e.g. put the venv on PATH
+
 # [storage]
 # data_dir = "~/fundus"    # single root for ALL Fundus runtime data — the search index, the
 #                          # extraction/embedding caches, the per-source cursors, and the run lock,
@@ -56,6 +64,10 @@ url = "http://127.0.0.1:5001"
 # max_concurrency = 2      # cap concurrent requests to docling (it drops queued connections when flooded);
 #                          # a request that hits a resource/time limit is then retried exclusively
 # timeout = 960            # client read timeout (s); keep above docling's max_sync_wait for large-scan OCR
+# ocr_engine = "ocrmac"    # OCR engine docling-serve should use (sent per request; default: let it choose).
+#                          # Set "ocrmac" to use Apple Vision on a BARE-METAL macOS docling-serve — faster
+#                          # and better on mixed-language scans than the container default (EasyOCR on CPU),
+#                          # which can't reach Vision. Leave unset for any containerized/Linux deployment.
 
 [extractor.engines.tika]
 url = "http://127.0.0.1:9998"

@@ -61,6 +61,35 @@ def test_docling_maps_md_to_blocks():
     assert "Body." in res.markdown
 
 
+def test_docling_sends_ocr_engine_when_configured():
+    def handler(request):
+        assert b'name="ocr_engine"' in request.content
+        assert b"ocrmac" in request.content
+        return httpx.Response(200, json={"document": {"md_content": "x"}})
+
+    ext = DoclingServeExtractor("http://docling:5001", client=_client(handler), ocr_engine="ocrmac")
+    ext.extract(_req())
+
+
+def test_docling_omits_ocr_engine_by_default():
+    def handler(request):
+        assert b'name="ocr_engine"' not in request.content  # let docling-serve use its own default
+        return httpx.Response(200, json={"document": {"md_content": "x"}})
+
+    ext = DoclingServeExtractor("http://docling:5001", client=_client(handler))
+    ext.extract(_req())
+
+
+def test_docling_omits_ocr_engine_when_ocr_off():
+    # Engine selection is meaningless with OCR disabled — the request stays self-consistent.
+    def handler(request):
+        assert b'name="ocr_engine"' not in request.content
+        return httpx.Response(200, json={"document": {"md_content": "x"}})
+
+    ext = DoclingServeExtractor("http://docling:5001", client=_client(handler), ocr_engine="ocrmac")
+    ext.extract(_req(ocr="off"))
+
+
 def test_docling_salvages_ocr_text_from_picture_pages():
     # A scanned page classified as one full-page picture: md_content collapses to an image
     # placeholder while the OCR text items sit inside the picture in json_content.

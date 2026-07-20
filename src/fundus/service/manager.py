@@ -18,7 +18,15 @@ import sys
 import tempfile
 from pathlib import Path
 
-from fundus.service.spec import FULL_SUFFIX, INDEX_SUFFIX, SERVE_SUFFIX, Job, Kind, Plan
+from fundus.service.spec import (
+    DOCLING_SUFFIX,
+    FULL_SUFFIX,
+    INDEX_SUFFIX,
+    SERVE_SUFFIX,
+    Job,
+    Kind,
+    Plan,
+)
 
 DAEMON_DIR = Path("/Library/LaunchDaemons")
 
@@ -78,6 +86,28 @@ def ensure_installed_binary() -> Path:
     return exe
 
 
+def ensure_docling_command(command: list[str]) -> list[str]:
+    """Validate the bare-metal docling-serve launch command before installing a keep-alive job for
+    it, and return it with argv[0] resolved to an absolute path. Two reasons: a typo'd path would
+    otherwise be written into a KeepAlive plist and relaunch-loop forever, and launchd execs the
+    program directly without searching PATH — so a bare name like ``docling-serve`` must be resolved
+    to its absolute location first. Same care taken over the fundus binary, applied to the user's
+    docling command."""
+    if not command:
+        raise ServiceError(
+            "[service.docling].command is empty; set the docling-serve launch command "
+            "(e.g. a venv's docling-serve and its args)."
+        )
+    exe = command[0]
+    found = exe if (os.sep in exe and os.path.exists(exe)) else shutil.which(exe)
+    if not found or not os.access(found, os.X_OK):
+        raise ServiceError(
+            f"docling launch command not executable: {exe!r}. Point [service.docling].command "
+            "at your docling-serve binary (typically a path inside its virtualenv)."
+        )
+    return [found, *command[1:]]
+
+
 # --- launchctl targets ------------------------------------------------------------------------
 
 
@@ -91,8 +121,10 @@ def plist_path(kind: Kind, label: str, home: Path) -> Path:
 
 
 def all_labels(label_prefix: str) -> list[str]:
-    """Every label fundus may install: the two index jobs and the serve daemon."""
-    return [label_prefix + s for s in (INDEX_SUFFIX, FULL_SUFFIX, SERVE_SUFFIX)]
+    """Every label fundus may install: the two index jobs, the serve daemon, and the optional
+    bare-metal docling-serve. Used by uninstall/status/detect, so it lists all possible jobs even
+    when a given install didn't include them (booting out an absent job is a harmless no-op)."""
+    return [label_prefix + s for s in (INDEX_SUFFIX, FULL_SUFFIX, SERVE_SUFFIX, DOCLING_SUFFIX)]
 
 
 def detect_kind(label_prefix: str, home: Path) -> Kind | None:

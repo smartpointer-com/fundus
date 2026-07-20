@@ -51,9 +51,10 @@ manage the service stack from this repo.
 
 ## Service jobs (macOS)
 
-`fundus service install` sets up three launchd jobs pointing at the installed CLI —
+`fundus service install` sets up up to four launchd jobs pointing at the installed CLI —
 incremental indexing (every 30 min), a nightly full reconcile, and the read-only
-MCP server (kept alive):
+MCP server (kept alive), plus an optional bare-metal docling-serve (opt-in, off by
+default; see below):
 
 ```bash
 make install                       # the service must point at an installed binary, not the dev venv
@@ -67,9 +68,14 @@ fundus service uninstall
 
 Flags `--interval`, `--full-at HH:MM`, and `--label-prefix` (or the `[service]`
 config block) tune it; the server's host/port/transport come from `[serve]`. The
-jobs run `fundus` directly and get their secrets from the configured `env_file`
-(see below). Set `--full-at` *after* whatever syncs your corpus to disk. Logs land
-in `<data_root>/logs/`.
+index/serve jobs run `fundus` directly and get their secrets from the configured
+`env_file` (see below). Set `--full-at` *after* whatever syncs your corpus to disk.
+Logs land in `<data_root>/logs/`.
+
+On Apple Silicon, `--docling` (or `[service.docling]`) adds a fourth job that keeps a
+**bare-metal docling-serve** alive — needed for Apple Vision (ocrmac) OCR, which the
+containerized engine can't reach. See
+[docs/deployment.md](docs/deployment.md#apple-silicon-ocr-via-apple-vision).
 
 ## Read-only access for agents (MCP)
 

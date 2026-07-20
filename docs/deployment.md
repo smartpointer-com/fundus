@@ -51,3 +51,29 @@ Copy this into `~/.config/fundus/DEPLOYMENT.local.md` and fill in your specifics
 - Schedule: <how/when incremental + full reconcile run>
 - Notes:    <container runtime, mounts, GPU, scheduling>
 ```
+
+## Apple Silicon: OCR via Apple Vision
+
+On macOS the extraction container cannot reach Apple's Vision framework or the
+GPU, so its OCR falls back to a CPU engine (EasyOCR) — noticeably slower and
+weaker on mixed German/English scans. To use **Apple Vision (ocrmac)** instead,
+run docling-serve **bare-metal** on the host (as you already do for the embedding
+model) and let fundus talk to it over HTTP:
+
+1. Install docling-serve into a host virtualenv with the `ocrmac` extra available
+   (Apple Vision has no model downloads; it uses the system framework).
+2. Run it on the host, e.g. `docling-serve run --host 127.0.0.1 --port 5001`, and
+   **stop the containerized docling-serve** so the port is free (leave Meilisearch
+   and tika in Docker).
+3. In `fundus.toml`, point the engine at the host server and select the engine:
+   ```toml
+   [extractor.engines.docling-serve]
+   url = "http://127.0.0.1:5001"
+   ocr_engine = "ocrmac"
+   ```
+4. Optionally let `fundus service` keep the server alive alongside the index/serve
+   jobs by setting `[service.docling]` (`enabled`, `command`, `environment`); then
+   `fundus service install` installs a `<prefix>.docling` keep-alive job too.
+
+`ocr_engine` is unset by default, so every containerized/Linux deployment keeps the
+current behavior with no change.

@@ -63,6 +63,11 @@ class EngineConfig(BaseModel):
     # HTTP read timeout (seconds). Keep it above the engine's own job timeout (e.g. docling-serve's
     # max_sync_wait) so slow OCR on large scans finishes instead of the client giving up first.
     timeout: float = 600.0
+    # OCR engine docling-serve should use, sent as a per-request field (docling-serve's own default
+    # is "auto"). Set to "ocrmac" to use Apple Vision on a bare-metal macOS docling-serve — the
+    # containerized engine can't reach Vision, so it stays on its CPU default (EasyOCR). None means
+    # the field is not sent, preserving docling-serve's default; this is the portable default.
+    ocr_engine: str | None = None
 
 
 class RouterConfig(BaseModel):
@@ -91,14 +96,31 @@ class SourceConfig(BaseModel):
     type: str
 
 
+class DoclingServiceConfig(BaseModel):
+    # Optional launchd job that keeps a bare-metal docling-serve alive. On Apple Silicon the
+    # containerized engine reaches neither Apple Vision (ocrmac) nor the GPU, so docling-serve runs
+    # on the host and [extractor.engines.docling-serve].url points at it. It is managed alongside the
+    # other `fundus service` jobs (one install/uninstall covers everything) and stays off unless
+    # enabled. The launch command and its environment live in config, out of this generic repo.
+    enabled: bool = False
+    # e.g. ["/path/to/venv/bin/docling-serve", "run", "--host", "127.0.0.1", "--port", "5001"]
+    command: list[str] = Field(default_factory=list)
+    # Extra environment for the server process, merged over the job's HOME/PATH (e.g. a venv bin dir
+    # on PATH, a model-cache dir). Unlike fundus's own secrets (which stay in env_file), this IS
+    # written into the world-readable plist — so it must not contain secrets.
+    environment: dict[str, str] = Field(default_factory=dict)
+
+
 class ServiceConfig(BaseModel):
     # Defaults for `fundus service` (launchd jobs). Each is overridable by an install-time flag.
-    # label_prefix yields the job labels <prefix>.index / .index-full / .serve; use your own
-    # reverse-DNS convention (e.g. com.you.fundus). Secrets come from the top-level `env_file`, which
-    # every fundus process sources at startup — so they never live in the world-readable plist.
+    # label_prefix yields the job labels <prefix>.index / .index-full / .serve / .docling (opt-in);
+    # use your own reverse-DNS convention (e.g. com.you.fundus). Secrets come from the top-level
+    # `env_file`, which every fundus process sources at startup — so they never live in the plist.
     label_prefix: str = "fundus"
     interval_minutes: int = 30  # incremental cadence
     full_at: str = "03:00"  # nightly full-reconcile wall-clock time (HH:MM)
+    # Optional keep-alive job for a bare-metal docling-serve (see DoclingServiceConfig); opt-in.
+    docling: DoclingServiceConfig = Field(default_factory=DoclingServiceConfig)
 
 
 class ServeConfig(BaseModel):

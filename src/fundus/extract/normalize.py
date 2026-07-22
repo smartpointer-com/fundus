@@ -11,7 +11,7 @@ import re
 
 from markdown_it import MarkdownIt
 
-from fundus.models import Block, TableData
+from fundus.models import Block
 
 _md = MarkdownIt("commonmark").enable("table")
 _PARA_SPLIT = re.compile(r"\n\s*\n")
@@ -43,7 +43,7 @@ def markdown_to_blocks(md: str) -> list[Block]:
             blocks.append(Block(type="paragraph", text=text))
         elif tok.type == "table_open":
             raw = _slice(lines, tok)
-            blocks.append(Block(type="table", text=raw, table=TableData(markdown=raw)))
+            blocks.append(Block(type="table", text=raw))
         elif tok.type in ("bullet_list_open", "ordered_list_open"):
             blocks.append(Block(type="list", text=_slice(lines, tok)))
         elif tok.type in ("fence", "code_block"):

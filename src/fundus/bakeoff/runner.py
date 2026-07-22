@@ -1,7 +1,7 @@
 """Run extraction engines over a sample set and compare their output.
 
-Lets you choose the default engine empirically on your own corpus before wiring
-the rest of the pipeline. A failing engine is recorded, not fatal.
+Supports choosing the default engine empirically on the target corpus before
+wiring the rest of the pipeline. A failing engine is recorded, not fatal.
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ class EngineRun(BaseModel):
     error: str | None = None
     elapsed_s: float = 0.0
     chars: int = 0
-    block_counts: dict[str, int] = Field(default_factory=dict)
     table_count: int = 0
     ocr_used: bool = False
 
@@ -39,16 +38,12 @@ def _measure(
     start = time.perf_counter()
     result = extract_with_cache(extractor, cache, req) if cache else extractor.extract(req)
     elapsed = time.perf_counter() - start
-    counts: dict[str, int] = {}
-    for block in result.blocks:
-        counts[block.type] = counts.get(block.type, 0) + 1
     run = EngineRun(
         engine=extractor.name,
         ok=True,
         elapsed_s=round(elapsed, 3),
         chars=len(result.markdown),
-        block_counts=counts,
-        table_count=counts.get("table", 0),
+        table_count=sum(1 for block in result.blocks if block.type == "table"),
         ocr_used=result.metadata.ocr_used,
     )
     return result, run

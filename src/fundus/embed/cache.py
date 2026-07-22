@@ -15,6 +15,8 @@ from collections.abc import Sequence
 from contextlib import closing
 from pathlib import Path
 
+from fundus.core.sqlite import connect as sqlite_connect
+
 
 def embed_input_text(title: str | None, body: str) -> str:
     """The exact text embedded for a document.
@@ -46,12 +48,7 @@ class SqliteEmbeddingCache:
             conn.execute("CREATE TABLE IF NOT EXISTS embeddings (key TEXT PRIMARY KEY, vec BLOB)")
 
     def _connect(self) -> sqlite3.Connection:
-        # Callers must close deterministically (``closing``): sqlite3's context manager only
-        # scopes the TRANSACTION, and an unclosed connection sits on a file descriptor until the
-        # cyclic GC runs — a long indexing run exhausts the fd limit long before that.
-        conn = sqlite3.connect(self._path, timeout=30.0)
-        conn.execute("PRAGMA journal_mode=WAL")
-        return conn
+        return sqlite_connect(self._path)  # per-call connection; see core.sqlite for the why
 
     def _key(self, text: str) -> str:
         return hashlib.sha256(f"{self._model}\x00{text}".encode()).hexdigest()

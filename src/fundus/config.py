@@ -131,7 +131,7 @@ class ServeConfig(BaseModel):
     # "sse" stays available for legacy clients, "stdio" for a host-spawned local subprocess.
     transport: str = "streamable-http"
     # Bearer token clients must present (env FUNDUS_SERVE_TOKEN). Required for the HTTP transports so
-    # not just any local process can reach the server; this is the key shared with OpenClaw.
+    # not just any local process can reach the server; this is the key shared with MCP clients.
     token: str | None = None
     url: str | None = None  # client-side override: full endpoint URL of a running server
 

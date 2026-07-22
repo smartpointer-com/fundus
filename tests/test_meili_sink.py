@@ -104,8 +104,8 @@ def test_delete_missing():
 
 
 def test_sink_only_calls_methods_the_real_client_has():
-    # Guards against the FakeIndex drifting from meilisearch's real API (which once hid a call to a
-    # non-existent `delete_documents_by_filter`). Every Index method the sink relies on must exist
+    # Guards against the FakeIndex drifting from meilisearch's real API — a drifted fake can hide
+    # calls to methods the real client lacks. Every Index method the sink relies on must exist
     # on both the real client and the fake.
     from meilisearch.index import Index
 

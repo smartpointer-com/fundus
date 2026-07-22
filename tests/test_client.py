@@ -54,3 +54,13 @@ def test_failure_message_other_error_passes_through():
 
     msg = _failure_message("http://h/mcp", True, Exception("Connection refused"))
     assert "Connection refused" in msg and "failed" in msg
+
+
+def test_client_version():
+    from typer.testing import CliRunner
+
+    from fundus.client.cli import client_app
+
+    result = CliRunner().invoke(client_app, ["version"])
+    assert result.exit_code == 0
+    assert result.output.strip() == "v0.1.0"

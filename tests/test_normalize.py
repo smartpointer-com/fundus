@@ -13,8 +13,7 @@ def test_markdown_table_preserved():
     md = "Intro\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n"
     tables = [b for b in markdown_to_blocks(md) if b.type == "table"]
     assert len(tables) == 1
-    assert tables[0].table is not None
-    assert "| a | b |" in tables[0].table.markdown
+    assert "| a | b |" in tables[0].text
 
 
 def test_markdown_code_block():

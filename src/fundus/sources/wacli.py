@@ -176,8 +176,6 @@ class WacliSource:
             item_kind="chat_window",
             title=title,
             ts=to_datetime(rows[-1][1]),
-            ts_start=to_datetime(rows[0][1]),
-            ts_end=to_datetime(rows[-1][1]),
             actors=sorted({m["sender"] for m in messages if m["sender"]}),
             payload=TextPayload(text=""),
             extra={"messages": messages, "chat": str(chat)},

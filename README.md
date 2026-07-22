@@ -2,16 +2,20 @@
 
 Fundus is a self-hostable toolkit that indexes a heterogeneous corpus — **email,
 chat messages, and document files** — into [Meilisearch](https://www.meilisearch.com/),
-giving you full-text **and** hybrid (keyword + semantic) search designed for
+for full-text **and** hybrid (keyword + semantic) search designed for
 consumption by agents.
 
 It is built around two plugin families, both swappable by configuration:
 
-- **Sources** — where data comes from (a notmuch mail store, a chat database, a
-  file tree). Nothing is hard-coded to a particular filesystem layout.
+- **Sources** — where data comes from: a notmuch mail store, a chat database
+  (e.g. a Slack archive from
+  [slack-scrollback](https://github.com/smartpointer-com/slack-scrollback)), or a file
+  tree (e.g. a Google Drive mirror kept fresh by
+  [abbild](https://github.com/smartpointer-com/abbild)). Nothing is hard-coded
+  to a particular filesystem layout.
 - **Extraction engines** — how document bytes become text. An engine-agnostic
-  interface lets you swap, A/B-test, or *escalate* between engines (docling-serve,
-  Apache Tika) without touching the rest of the pipeline.
+  interface supports swapping, A/B-testing, or *escalating* between engines
+  (docling-serve, Apache Tika) without touching the rest of the pipeline.
 
 ## How it fits together
 
@@ -58,10 +62,11 @@ step, the next `--full` converges it.
 
 ## Service jobs (macOS)
 
-`fundus service install` sets up up to four launchd jobs pointing at the installed CLI —
-incremental indexing (every 30 min), a nightly full reconcile, and the read-only
-MCP server (kept alive), plus an optional bare-metal docling-serve (opt-in, off by
-default; see below):
+`fundus service install` sets up up to four launchd jobs — incremental indexing
+(every 30 min), a nightly full reconcile, and the read-only MCP server (kept
+alive), all running the installed CLI, plus an optional keep-alive for a
+bare-metal docling-serve that runs the command configured under
+`[service.docling]` (opt-in, off by default; see below):
 
 ```bash
 make install                       # the service must point at an installed binary, not the dev venv
@@ -87,8 +92,9 @@ containerized engine can't reach. See
 ## Read-only access for agents (MCP)
 
 `fundus serve` runs a read-only MCP server exposing `search`, `sources`, and
-`locate` tools — the surface you hand to an agent. It binds only to a search-scoped
-Meili key (never the admin key) and, over HTTP, is gated by a bearer token:
+`locate` tools — the surface you hand to an agent. It searches with a
+search-scoped Meili key when one is configured (falling back to the admin key it
+already holds) and, over HTTP, is gated by a bearer token:
 
 ```bash
 export FUNDUS_SERVE_TOKEN=…         # the token you share with the agent (required over HTTP)
@@ -128,16 +134,14 @@ fundus-client locate "<a ref from a search hit>"
 
 ## Local deployment notes
 
-Keep your machine-specific wiring (corpus paths, service hosts/ports, the
-embedding endpoint) in `~/.config/fundus/DEPLOYMENT.local.md` — outside this repo,
-which stays generic. If you use an AI coding assistant, point its context at that
-file so it knows your environment without leaking it into the repository. See
+Machine-specific wiring (corpus paths, service hosts/ports, the embedding
+endpoint) belongs outside this repo, which stays generic — see
 [docs/deployment.md](docs/deployment.md).
 
 ## Status
 
-The pipeline is implemented end-to-end, unit-tested (`ruff` + `mypy --strict`
-clean), and validated against live services on a real corpus. Beyond the core it
+The pipeline is implemented end-to-end, tested (`pytest`; `ruff` + `mypy
+--strict` clean), and validated against live services on a real corpus. Beyond the core it
 adds an escalating extraction router (tika-first, docling for scans, forced OCR
 as a last rung), fan-out embedding with a reusable vector cache, and indexing of
 email/chat document attachments.

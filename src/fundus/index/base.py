@@ -6,7 +6,7 @@ index-settings / upsert / delete semantics from the rest of the pipeline.
 
 from __future__ import annotations
 
-from typing import Protocol, Sequence, runtime_checkable
+from typing import Protocol, Sequence
 
 from pydantic import BaseModel, Field
 
@@ -29,11 +29,10 @@ class IndexSettings(BaseModel):
         ]
     )
     sortable: list[str] = Field(default_factory=lambda: ["ts"])
-    # Locales declared for localizedAttributes (configure to match your corpus).
+    # Locales declared for localizedAttributes (from the top-level `locales` config).
     locales: list[str] = Field(default_factory=lambda: ["eng"])
 
 
-@runtime_checkable
 class Sink(Protocol):
     def ensure_schema(self, settings: IndexSettings) -> None: ...
 

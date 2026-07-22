@@ -11,6 +11,7 @@ from pathlib import Path
 
 import typer
 
+from fundus.cli_common import ConfigOpt
 from fundus.config import FundusConfig, default_config_path, load_config
 from fundus.service import manager
 from fundus.service.spec import (
@@ -29,7 +30,6 @@ service_app = typer.Typer(
     "bare-metal docling-serve.",
 )
 
-ConfigOpt = typer.Option(None, "--config", "-c", help="Path to fundus.toml (default: XDG).")
 
 
 @service_app.callback()

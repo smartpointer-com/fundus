@@ -308,3 +308,12 @@ def test_escalate_exposes_inner_engine_fingerprints():
     quality.fingerprint = "ocrmac"
     router = EscalatingExtractor(fast, quality, min_chars=100)
     assert router.engine_fingerprints() == {"tika": "", "docling-serve": "ocrmac"}
+
+
+def test_registry_passes_tika_timeout():
+    from fundus.config import EngineConfig, ExtractorConfig
+    from fundus.extract.registry import build_extractor
+
+    cfg = ExtractorConfig(engines={"tika": EngineConfig(url="http://t:9998", timeout=5.0)})
+    extractor = build_extractor("tika", cfg)
+    assert extractor._client.timeout.read == 5.0  # configured timeout reaches the HTTP client

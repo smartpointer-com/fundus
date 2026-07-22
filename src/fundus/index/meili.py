@@ -84,8 +84,8 @@ class MeiliSink:
     def delete_parents(self, parent_ids: set[str]) -> int:
         """Delete every document under the given parent ids (filter-delete, batched).
 
-        Batched because a `--full` run that re-indexes many files (e.g. the first pass after adding
-        the fingerprint fields) would otherwise build one enormous `parent_id IN [...]` filter.
+        Batched because a `--full` run that re-indexes many files (e.g. one that reparses most of
+        a large tree) would otherwise build one enormous `parent_id IN [...]` filter.
         """
         ids = sorted(parent_ids)
         for start in range(0, len(ids), 500):

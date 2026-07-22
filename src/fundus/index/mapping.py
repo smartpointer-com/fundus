@@ -7,13 +7,20 @@ from fundus.models import Chunk, IndexDocument, SourceItem
 
 
 def to_index_document(
-    item: SourceItem, chunk: Chunk, *, extract_sig: str = "", ocr_used: bool = False
+    item: SourceItem,
+    chunk: Chunk,
+    *,
+    extract_sig: str = "",
+    ocr_used: bool = False,
+    languages: list[str] | None = None,
 ) -> IndexDocument:
     meta = chunk.meta
     ts = meta["ts"] if isinstance(meta.get("ts"), int) else int(item.ts.timestamp())
     actors = meta["actors"] if isinstance(meta.get("actors"), list) else item.actors
     msg_ids = meta["msg_ids"] if isinstance(meta.get("msg_ids"), list) else None
-    lang = item.extra.get("lang")
+    # Engine-detected languages win (tika reports them); item.extra["lang"] is the
+    # connector-level override slot.
+    lang = languages or item.extra.get("lang")
 
     body = chunk.text
     if chunk.heading_path:

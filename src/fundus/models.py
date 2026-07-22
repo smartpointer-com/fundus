@@ -88,20 +88,19 @@ class SourceItem(BaseModel):
     size: int | None = None  # file items only: byte size (fingerprint for --full reconcile)
     mtime: float | None = None  # file items only: epoch mtime (fingerprint for --full reconcile)
     ts: datetime
-    ts_start: datetime | None = None
-    ts_end: datetime | None = None
     actors: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     payload: Payload
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
-class TableData(BaseModel):
-    markdown: str = ""
-
-
 class Block(BaseModel):
-    """One structural element, in reading order."""
+    """One structural element, in reading order.
+
+    The type vocabulary is the full engine contract; adapters currently emit a
+    subset (heading/paragraph/list/table/code), and chunkers branch only on
+    heading/table — the rest flows through as text.
+    """
 
     type: Literal[
         "heading",
@@ -119,7 +118,6 @@ class Block(BaseModel):
     text: str = ""
     level: int | None = None  # heading level
     page: int | None = None
-    table: TableData | None = None
 
 
 class EngineRef(BaseModel):
@@ -128,6 +126,13 @@ class EngineRef(BaseModel):
 
 
 class DocMeta(BaseModel):
+    """Engine-reported document metadata (part of the cached extraction contract).
+
+    ``languages`` feeds the index's ``lang`` field; ``ocr_used`` marks documents for
+    the reparse selector. ``title`` is the engine-normalized document title (e.g.
+    tika's dc:title), kept with the cached extraction for downstream consumers.
+    """
+
     title: str | None = None
     languages: list[str] = Field(default_factory=list)
     ocr_used: bool = False
@@ -162,8 +167,6 @@ class Chunk(BaseModel):
     seq: int
     text: str
     heading_path: list[str] = Field(default_factory=list)  # carried structural context
-    page: int | None = None
-    token_count: int = 0
     meta: dict[str, Any] = Field(default_factory=dict)  # chunk-type extras (msg_ids, sheet, ts)
 
 

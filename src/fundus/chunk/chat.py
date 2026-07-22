@@ -89,11 +89,9 @@ class ChatChunker:
                     parent_id=pid,
                     seq=seq,
                     text=text,
-                    token_count=count_tokens(text),
                     meta={
                         "msg_ids": [m.id for m in win],
                         "ts": int(win[-1].ts.timestamp()),
-                        "ts_start": int(win[0].ts.timestamp()),
                         "actors": sorted({m.sender for m in win if m.sender}),
                     },
                 )

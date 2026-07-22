@@ -248,3 +248,9 @@ def test_cli_reparse_runs_pipeline_on_selection(tmp_path, monkeypatch):
     assert result.exit_code == 0
     assert calls == [("docs", ["/t/a.pdf"])]
     assert "docs: re-parsed 1/1 documents (3 chunks, 0 failed, 0 vanished)" in result.output
+
+
+def test_cli_version():
+    result = runner.invoke(app, ["version"])
+    assert result.exit_code == 0
+    assert result.output.strip() == "v0.1.0"

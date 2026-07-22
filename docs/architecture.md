@@ -42,7 +42,7 @@ for agents. It is organized around two plugin families — **sources** and
 
 ```
 src/fundus/
-  cli.py            Typer app: init | index | query | connect | serve | sources | paths | service | embed-backfill | bakeoff
+  cli.py            Typer app: init | index | reparse | query | connect | serve | sources | paths | service | embed-backfill | bakeoff | version
   service/          launchd job generation + management (index jobs + the MCP serve daemon)
   config.py         configuration model + loader (TOML + env)
   models.py         domain models (SourceItem, ExtractionResult/Block, Chunk, IndexDocument)
@@ -107,8 +107,8 @@ A `--full` run additionally reconciles the index against reality (see
 deletions for every source, and for **file-tree sources** a full content
 reconcile that also re-indexes edits the cursor cannot see.
 
-Flags: `--only <source>`, `--full`, `--force`, plus an exit-early option for
-cheap iteration. A global lock prevents concurrent runs.
+Flags: `--only <source>`, `--full`, `--force`, `--allow-mass-delete`,
+`--workers`. A global lock prevents concurrent runs.
 
 With **fan-out** indexing the per-source loop runs on a bounded worker pool:
 extraction and embedding happen concurrently across items, each chunk's vector is
@@ -161,12 +161,12 @@ A **single index** holds all sources, distinguished by a `source` facet:
 - **searchable:** `title`, `body` only
 - **filterable:** `source, item_kind, ts, actors, tags, path, mime, lang, parent_id`
 - **sortable:** `ts`
-- **localizedAttributes:** configure the locales present in your corpus (e.g.
-  `["eng", "deu"]`).
-- **embedders:** by default a `userProvided` embedder — Fundus computes the
-  document vectors itself (fan-out) and stores them; a REST embedder (Meilisearch
-  embeds, with a document template over `{{title}} {{body}}`) is the alternative
-  for light models.
+- **localizedAttributes:** the corpus's locales, from the top-level `locales`
+  config (e.g. `["eng", "deu"]`).
+- **embedders:** a REST embedder by default (Meilisearch embeds the documents
+  itself, with a document template over `{{doc.title}} {{doc.body}}`); with
+  `fanout = true` — the recommended mode for heavy models — it becomes a
+  `userProvided` embedder and Fundus computes and stores the vectors itself.
 
 Index settings are applied **before the first ingest** (changing them later
 triggers a full reindex).
@@ -198,11 +198,9 @@ corpus-dependent, so it is deliberately swappable:
 - The **cache key includes the engine name + version + options**, so multiple
   engines' outputs for the same file coexist — enabling honest A/B and ensuring
   re-chunking never re-extracts (never re-OCRs). The version is a *config pin*,
-  not the live engine version: routine engine upgrades rarely change output
-  enough to matter, so they deliberately do NOT invalidate the cache. When a
-  re-extract IS wanted (a config change detected via `extract_sig`, or a manual
-  `fundus reparse`), the pipeline bypasses the cache *read* and the fresh result
-  overwrites the row under the same key.
+  not the live engine version, so engine upgrades never invalidate the cache;
+  deliberate re-extraction goes through the cache-bypassing refresh described
+  under [Incremental indexing & deletions](#incremental-indexing--deletions).
 - `bakeoff/` runs the engines over a representative sample and reports
   (characters, tables, speed, failures) so the default engine is chosen
   **empirically** on the target corpus.
@@ -316,8 +314,8 @@ incremental that fires mid-full simply skips.
   plist — the plist execs `fundus` directly, and `fundus` sources the config's
   `env_file` itself at startup (see Configuration).
 - Logs go to `<data_root>/logs/`; `status` (all jobs), `restart` (`--full` /
-  `--serve` to target one), and `run` (trigger an index now) round out the
-  subcommands. The pure plist generation lives in `service/spec.py`, the
+  `--serve` / `--docling` to target one), and `run` (trigger an index now) round
+  out the subcommands. The pure plist generation lives in `service/spec.py`, the
   launchctl/sudo side effects in `service/manager.py`.
 
 ## Dependencies
@@ -367,6 +365,6 @@ config file itself follows `XDG_CONFIG_HOME` independently.
 - The **indexer uses an admin key**; **consumers use a read-only search key**.
   Consumers can run as a separate, least-privileged OS user with no write path to
   the index and no filesystem access to the corpus.
-- When isolating the embedding model from other model servers, you can run it
-  under a dedicated account while **sharing the model weights on disk** to avoid
+- When isolated from other model servers, the embedding model can run under a
+  dedicated account while **sharing the model weights on disk** to avoid
   duplicating them across installations.

@@ -8,7 +8,7 @@ use different chunkers (prose/document, chat window, tabular), selected in
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 from pydantic import BaseModel
 
@@ -21,6 +21,5 @@ class ChunkParams(BaseModel):
     overlap_tokens: int = 64
 
 
-@runtime_checkable
 class Chunker(Protocol):
     def chunk(self, doc: ExtractionResult, item: SourceItem) -> list[Chunk]: ...

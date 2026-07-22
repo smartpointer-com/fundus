@@ -9,12 +9,11 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 from fundus.models import Cursor
 
 
-@runtime_checkable
 class StateStore(Protocol):
     def get_cursor(self, source: str) -> Cursor | None: ...
 

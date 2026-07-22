@@ -30,7 +30,7 @@
 # port = 8181
 # transport = "streamable-http"   # durable; "sse" (legacy) or "stdio" also supported
 # token = "..."            # bearer token clients must present (or set FUNDUS_SERVE_TOKEN); this is
-#                          # the key you share with OpenClaw. Required for the HTTP transports.
+#                          # the key you share with MCP clients. Required for the HTTP transports.
 # url = "..."              # client-side only: full endpoint of a running server (else host/port)
 
 [meilisearch]
@@ -104,7 +104,8 @@ type = "wacli"
 db   = "/path/to/whatsapp.db"    # a wacli-shaped SQLite message store (opened read-only)
 # The connector reads any store with this row shape; table and column names are all
 # overridable (table, id_col, chat_col, ..., text_cols), so another archiver's export —
-# e.g. a Slack archive exposing a compatible view — plugs in with config alone:
+# e.g. a Slack archive from slack-scrollback (github.com/smartpointer-com/slack-scrollback),
+# which ships a compatible view — plugs in with config alone:
 # table     = "messages_flat"
 # text_cols = ["text"]
 # tags      = ["slack", "attachment"]   # stamped on shared-document items (default: ["whatsapp", "attachment"])
@@ -113,3 +114,5 @@ db   = "/path/to/whatsapp.db"    # a wacli-shaped SQLite message store (opened r
 name  = "documents"
 type  = "files"
 roots = ["/path/to/documents", "/path/to/more/documents"]
+# Any local tree works — e.g. a read-only Google Drive mirror kept fresh by
+# abbild (github.com/smartpointer-com/abbild).

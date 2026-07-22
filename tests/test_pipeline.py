@@ -563,3 +563,21 @@ def test_reparse_counts_vanished_files():
         src, ["gone"]
     )
     assert counts == {"selected": 1, "reparsed": 0, "missing": 1, "failed": 0, "chunks": 0}
+
+
+def test_engine_detected_languages_reach_the_index_doc():
+    class LangExtractor(FakeExtractor):
+        def extract(self, req):
+            self.calls += 1
+            return ExtractionResult(
+                engine=EngineRef(name="fake", version="1"),
+                blocks=[Block(type="paragraph", text="hallo welt")],
+                markdown="hallo welt",
+                metadata=DocMeta(languages=["de"]),
+            )
+
+    sink = FakeSink()
+    item = _item(source="docs", native_id="f.pdf", mime_type="application/pdf",
+                 payload=BlobPayload(data=b"PDFBYTES"))
+    _pipeline(sink, LangExtractor()).index_source(FakeSource("docs", [item]))
+    assert sink.docs and all(d.lang == ["de"] for d in sink.docs)

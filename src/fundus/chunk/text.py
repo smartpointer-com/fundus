@@ -111,8 +111,6 @@ class TextChunker:
                             seq=seq,
                             text=text,
                             heading_path=anchor.hpath,
-                            page=anchor.page,
-                            token_count=count_tokens(text),
                         )
                     )
                     seq += 1

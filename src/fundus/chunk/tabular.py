@@ -91,7 +91,6 @@ class TabularChunker:
                     seq=seq,
                     text=text,
                     heading_path=[sheet] if sheet else [],
-                    token_count=count_tokens(text),
                     meta={"sheet": sheet, "row_start": group_start, "row_end": end_row},
                 )
             )

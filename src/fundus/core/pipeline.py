@@ -239,7 +239,11 @@ class Pipeline:
                 sig = self._extract_sig(doc)
                 docs = [
                     to_index_document(
-                        item, chunk, extract_sig=sig, ocr_used=doc.metadata.ocr_used
+                        item,
+                        chunk,
+                        extract_sig=sig,
+                        ocr_used=doc.metadata.ocr_used,
+                        languages=doc.metadata.languages,
                     )
                     for chunk in chunker_for(item).chunk(doc, item)
                 ]

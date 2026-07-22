@@ -66,11 +66,11 @@ def _pipx_hint() -> str | None:
 
 
 def ensure_installed_binary() -> Path:
-    """Resolve the fundus binary to embed, refusing a dev build (the user must `make install`).
+    """Resolve the fundus binary to embed, refusing a dev build.
 
     The plist points at the binary that invoked ``service install``; if that binary is the editable
     dev build, the generated job would depend on the source tree and drift from any installed copy —
-    exactly the mismatch to prevent — so we stop and tell the user to install and re-invoke.
+    exactly the mismatch to prevent — so the install aborts and points at ``make install``.
     """
     exe = self_binary()
     if is_editable_install():
@@ -147,8 +147,8 @@ def _run(cmd: list[str], *, sudo: bool, check: bool = True, capture: bool = Fals
 def _wait_until_gone(target: str, *, sudo: bool, timeout: float = 10.0) -> None:
     """Wait for launchd to finish tearing a service down after ``bootout``, before re-bootstrapping.
     ``launchctl bootout`` returns before a busy daemon's graceful shutdown completes, so an immediate
-    ``bootstrap`` can race the drain and fail — which stranded the actively-serving MCP daemon on a
-    reinstall. Poll until the label is no longer registered, bounded by ``timeout`` (then proceed
+    ``bootstrap`` can race the drain and fail, stranding an actively-serving daemon on reinstall.
+    Poll until the label is no longer registered, bounded by ``timeout`` (then proceed
     anyway; the bootstrap itself still surfaces a real error)."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:

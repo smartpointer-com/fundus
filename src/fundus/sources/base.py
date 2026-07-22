@@ -13,7 +13,6 @@ from typing import Iterator, Protocol, runtime_checkable
 from fundus.models import Cursor, FileStat, SourceItem
 
 
-@runtime_checkable
 class Source(Protocol):
     name: str  # configured instance name
     type: str  # connector type identifier

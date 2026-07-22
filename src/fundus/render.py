@@ -2,10 +2,29 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import Any
 
 import typer
+
+
+def render_groups(
+    groups: list[dict[str, Any]], *, json_out: bool = False, fields: list[str] | None = None
+) -> None:
+    """Render parent-grouped hits as text or JSON, optionally projected to selected fields."""
+    if json_out:
+        out: Any = [{k: g.get(k) for k in fields} for g in groups] if fields else groups
+        typer.echo(json.dumps(out, indent=2, ensure_ascii=False, default=str))
+        return
+    if not groups:
+        typer.echo("(no results)")
+        return
+    for n, g in enumerate(groups, 1):
+        if fields:
+            typer.echo("  ".join(f"{k}={g.get(k)}" for k in fields))
+        else:
+            print_result(n, g)
 
 
 def fmt_ts(ts: Any) -> str:

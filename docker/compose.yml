@@ -2,7 +2,8 @@
 #
 # The embedding MODEL is intentionally absent here — it must run bare-metal
 # (it needs GPU access, which containers on macOS cannot reach) and is called
-# over HTTP by Meilisearch. Run it separately and point [embedder].url at it.
+# over HTTP: by Fundus in fan-out mode, by Meilisearch in REST-embedder mode.
+# Run it separately and point [embedder].url at it.
 #
 # Pin every image to a current release before deploying.
 name: fundus

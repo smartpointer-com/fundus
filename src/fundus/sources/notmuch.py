@@ -29,7 +29,7 @@ Runner = Callable[[list[str]], str]
 PartRunner = Callable[[str, int], bytes]
 
 # Attachment MIME types worth extracting (documents). Images and inline body parts are skipped:
-# they are mostly signatures/logos/photos (noise plus OCR cost) and can be enabled later.
+# they are mostly signatures/logos/photos (noise plus OCR cost).
 _ATTACHMENT_TYPES = frozenset({
     "application/pdf",
     "application/rtf",

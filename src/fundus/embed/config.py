@@ -25,7 +25,8 @@ def rest_embedder(
         "url": cfg.url,
         # The "{{..}}" rest markers let Meilisearch batch many documents into one request
         # (input array) and read back the parallel array of embeddings. Without them Meili
-        # sends one HTTP request per document — ~27x slower against a high-latency local model.
+        # sends one HTTP request per document — over an order of magnitude slower against a
+        # heavy local model.
         "request": {"model": cfg.model, "input": ["{{text}}", "{{..}}"]},
         "response": {"data": [{"embedding": "{{embedding}}"}, "{{..}}"]},
         "documentTemplate": document_template,

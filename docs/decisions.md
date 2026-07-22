@@ -41,12 +41,13 @@ see decision 16.
 
 ## 6. Embeddings: fan-out from the orchestrator, with a vector cache
 
-The default is fan-out indexing: Fundus computes document vectors itself, calling a bare-metal,
-OpenAI-compatible endpoint concurrently from the indexing worker pool, then hands Meilisearch the
-finished vectors (a `userProvided` embedder). This sidesteps Meilisearch's one-request-at-a-time
-REST-embedder path, which is the bottleneck on a heavy local model. A SQLite vector cache (keyed by
-model + embed-input text) lets re-indexes reuse embeddings rather than recompute them. The simpler
-`rest_embedder` (Meilisearch embeds documents itself) stays available for light models. Either way
+The recommended mode for heavy local models is fan-out indexing (`fanout = true`): Fundus computes
+document vectors itself, calling a bare-metal, OpenAI-compatible endpoint concurrently from the
+indexing worker pool, then hands Meilisearch the finished vectors (a `userProvided` embedder). This
+sidesteps Meilisearch's one-request-at-a-time REST-embedder path, which is the bottleneck on a
+heavy local model. A SQLite vector cache (keyed by model + embed-input text) lets re-indexes reuse
+embeddings rather than recompute them. The simpler REST embedder (Meilisearch embeds documents
+itself) is the out-of-the-box default, fine for light models. Either way
 the orchestrator only pushes JSON and never imports an ML framework. Queries are always embedded by
 Fundus so a model-specific instruct prefix can be applied without polluting the keyword query.
 
@@ -136,27 +137,21 @@ stay in the user's config, not the repo — this stays a generic toolkit.
 
 ## 16. Extraction provenance in the index; the cache never auto-invalidates
 
-Two levers exist for "the indexed text is stale even though the file didn't
-change", and they are deliberately different mechanisms:
+Two different levers cover "the indexed text is stale even though the file
+didn't change":
 
-**Deliberate config changes converge automatically.** Every document carries an
-`extract_sig` — the engine that produced its text plus that engine's
-output-affecting settings (`docling-serve:ocrmac`), stamped at extraction time
-and read back as part of the `--full` manifest. When configuration changes (a
-new `ocr_engine`), the nightly full reconcile finds the affected documents by
-sig drift and re-parses exactly those, bypassing the extraction-cache *read*
-(the cached row is the stale artifact; the fresh result overwrites it in
-place). Only documents produced by the changed engine re-parse — the escalating
-router's tika-served majority is untouched by a docling re-tune.
+**Deliberate config changes converge automatically.** Every document records
+which engine and output-affecting settings produced its text (`extract_sig`);
+the `--full` reconcile of a file-tree source re-parses exactly the documents
+whose sig no longer matches the current configuration (mechanics in
+[architecture.md](architecture.md#incremental-indexing--deletions)). Only
+documents produced by the changed engine re-parse — a docling re-tune never
+touches the tika-served majority.
 
 **Engine upgrades do not auto-invalidate.** Engines update frequently and
 mostly without output-visible effect, so neither the cache key nor the sig
-tracks live engine versions — an upgrade alone re-OCRs nothing (auto-invalidating
-on version would be overly conservative and turn routine upgrades into
-surprise corpus-wide re-OCR nights). When an upgrade IS judged worth it, that's
-a human call, made explicit: `fundus reparse --ocr-only` (or `--path-prefix`,
-`--source`) re-extracts the selection through the same cache-bypassing refresh.
-`reparse` deletes a document's old chunks only after its fresh extraction
-succeeded, so an engine outage mid-run degrades to "nothing happened", never to
-lost documents. (Manual pinning via the engine `version` config field remains
-as a blunt fallback lever.)
+tracks live engine versions — auto-invalidating on version would turn routine
+upgrades into surprise corpus-wide re-OCR nights. Re-extraction after an
+upgrade is always an explicit command (`fundus reparse`), which replaces a
+document only after its fresh extraction succeeded. (Manual pinning via the
+engine `version` config field remains as a blunt fallback lever.)

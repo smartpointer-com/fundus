@@ -8,12 +8,14 @@ from typing import Any
 
 import typer
 
+from fundus import __version__
 from fundus.bakeoff.runner import run_bakeoff
+from fundus.cli_common import ConfigOpt
 from fundus.config import load_config
 from fundus.core.locking import AlreadyRunning, run_lock
 from fundus.core.pipeline import build_pipeline, build_sink
 from fundus.extract.registry import build_extractor
-from fundus.render import print_result as _print_result
+from fundus.render import render_groups
 from fundus.service.cli import service_app
 
 app = typer.Typer(
@@ -21,7 +23,10 @@ app = typer.Typer(
 )
 app.add_typer(service_app, name="service")
 
-ConfigOpt = typer.Option(None, "--config", "-c", help="Path to fundus.toml (default: XDG).")
+@app.command()
+def version() -> None:
+    """Print the fundus version."""
+    typer.echo(f"v{__version__}")
 
 
 @app.command()
@@ -159,18 +164,7 @@ def query(
     cfg = load_config(config)
     groups = build_sink(cfg).search(text, semantic_ratio=semantic_ratio, filters=filters, limit=limit)
     keys = [f.strip() for f in fields.split(",")] if fields else None
-    if json_out:
-        out: Any = [{k: g.get(k) for k in keys} for g in groups] if keys else groups
-        typer.echo(json.dumps(out, indent=2, ensure_ascii=False, default=str))
-        return
-    if not groups:
-        typer.echo("(no results)")
-        return
-    for n, g in enumerate(groups, 1):
-        if keys:
-            typer.echo("  ".join(f"{k}={g.get(k)}" for k in keys))
-        else:
-            _print_result(n, g)
+    render_groups(groups, json_out=json_out, fields=keys)
 
 
 @app.command()
@@ -327,7 +321,11 @@ def bakeoff(
         typer.echo(result.file)
         for r in result.runs:
             status = "ok" if r.ok else f"FAIL: {r.error}"
-            typer.echo(f"  {r.engine:<14} {status:<24} {r.chars:>7} chars  {r.table_count} tables  {r.elapsed_s}s")
+            ocr = "  [ocr]" if r.ocr_used else ""
+            typer.echo(
+                f"  {r.engine:<14} {status:<24} {r.chars:>7} chars  "
+                f"{r.table_count} tables  {r.elapsed_s}s{ocr}"
+            )
 
 
 if __name__ == "__main__":

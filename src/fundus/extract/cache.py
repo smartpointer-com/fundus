@@ -11,11 +11,12 @@ import sqlite3
 import time
 from contextlib import closing
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict
 
 from fundus.core.ids import content_sha256, options_hash
+from fundus.core.sqlite import connect as sqlite_connect
 from fundus.extract.base import ExtractRequest, Extractor
 from fundus.models import ExtractionResult
 
@@ -32,7 +33,6 @@ class CacheKey(BaseModel):
         return f"{self.content_sha256}:{self.engine}:{self.engine_version}:{self.options_hash}"
 
 
-@runtime_checkable
 class ExtractionCache(Protocol):
     def get(self, key: CacheKey) -> ExtractionResult | None: ...
 
@@ -52,12 +52,7 @@ class SqliteExtractionCache:
             )
 
     def _connect(self) -> sqlite3.Connection:
-        # A new connection per call (each worker thread gets its own); the busy timeout lets
-        # concurrent writers from the worker pool wait instead of erroring "database is locked".
-        # Callers must close deterministically (``closing``): sqlite3's context manager only
-        # scopes the TRANSACTION, and an unclosed connection sits on a file descriptor until the
-        # cyclic GC runs — a long indexing run exhausts the fd limit long before that.
-        return sqlite3.connect(self._path, timeout=30.0)
+        return sqlite_connect(self._path)  # per-call connection; see core.sqlite for the why
 
     def get(self, key: CacheKey) -> ExtractionResult | None:
         with closing(self._connect()) as conn:

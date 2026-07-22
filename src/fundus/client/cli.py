@@ -1,6 +1,6 @@
 """`fundus-client` — a thin MCP client that calls a running fundus server's tools.
 
-For human operators and shell scripts. Holds no Meili/embed keys — only the server endpoint and the
+For interactive use and shell scripts. Holds no Meili/embed keys — only the server endpoint and the
 bearer token. Talks streamable-HTTP (or SSE) to the server and invokes its search/sources/locate
 tools, so it is a true read-only consumer just like an agent.
 """
@@ -14,15 +14,22 @@ from typing import Any
 
 import typer
 
+from fundus import __version__
+from fundus.cli_common import ConfigOpt
 from fundus.config import FundusConfig, load_config
-from fundus.render import print_result
+from fundus.render import render_groups
 
 client_app = typer.Typer(no_args_is_help=True, help="Query a running fundus MCP server.")
 
-ConfigOpt = typer.Option(None, "--config", "-c", help="Path to fundus.toml (default: XDG).")
 UrlOpt = typer.Option(None, "--url", help="Server endpoint (default: from [serve] config).")
 TokenOpt = typer.Option(None, "--token", help="Bearer token (default: [serve].token / env).")
 TransportOpt = typer.Option(None, "--transport", help="streamable-http (default) | sse.")
+
+
+@client_app.command()
+def version() -> None:
+    """Print the fundus-client version."""
+    typer.echo(f"v{__version__}")
 
 
 def _payload(result: Any) -> Any:
@@ -110,14 +117,7 @@ def query(
     """Search the corpus via the server's `search` tool."""
     groups = _invoke(load_config(config), url, token, transport, "search",
                      {"query": text, "limit": limit, "semantic_ratio": semantic_ratio, "filters": filters})
-    if json_out:
-        typer.echo(json.dumps(groups, indent=2, default=str))
-        return
-    if not groups:
-        typer.echo("(no results)")
-        return
-    for i, g in enumerate(groups, 1):
-        print_result(i, g)
+    render_groups(groups, json_out=json_out)
 
 
 @client_app.command()

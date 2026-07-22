@@ -57,8 +57,8 @@ Copy this into `~/.config/fundus/DEPLOYMENT.local.md` and fill in your specifics
 On macOS the extraction container cannot reach Apple's Vision framework or the
 GPU, so its OCR falls back to a CPU engine (EasyOCR) — noticeably slower and
 weaker on mixed German/English scans. To use **Apple Vision (ocrmac)** instead,
-run docling-serve **bare-metal** on the host (as you already do for the embedding
-model) and let fundus talk to it over HTTP:
+run docling-serve **bare-metal** on the host (as with the embedding model) and
+let fundus talk to it over HTTP:
 
 1. Install docling-serve into a host virtualenv with the `ocrmac` extra available
    (Apple Vision has no model downloads; it uses the system framework).
@@ -75,5 +75,9 @@ model) and let fundus talk to it over HTTP:
    jobs by setting `[service.docling]` (`enabled`, `command`, `environment`); then
    `fundus service install` installs a `<prefix>.docling` keep-alive job too.
 
-`ocr_engine` is unset by default, so every containerized/Linux deployment keeps the
-current behavior with no change.
+`ocr_engine` is unset by default; containerized/Linux deployments need not set it.
+
+For one-off OCR of individual PDFs outside the indexing pipeline (including
+per-file control of the rasterization scale that docling-serve's HTTP API does
+not expose), [pdfsnz](https://github.com/smartpointer-com/pdfsnz) drives the
+same docling + ocrmac stack as a standalone CLI.

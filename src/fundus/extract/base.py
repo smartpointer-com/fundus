@@ -7,7 +7,7 @@ This keeps the engine choice swappable and A/B-testable.
 
 from __future__ import annotations
 
-from typing import Literal, Protocol, runtime_checkable
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field
 
@@ -28,7 +28,6 @@ class ExtractRequest(BaseModel):
     options: ExtractOptions = Field(default_factory=ExtractOptions)
 
 
-@runtime_checkable
 class Extractor(Protocol):
     name: str
     version: str

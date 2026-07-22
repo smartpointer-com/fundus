@@ -25,15 +25,16 @@ openssl rand -base64 32   # → FUNDUS_SERVE_TOKEN=… in your env_file
 fundus serve              # streamable-HTTP on 127.0.0.1:8181 by default
 ```
 
-The server binds only a search-scoped Meilisearch key (never the admin key) and
-cannot mutate the index. Host, port, and transport live under `[serve]` in
-`fundus.toml`.
+The server searches with a search-scoped Meilisearch key when one is configured
+(falling back to the admin key it already holds) and cannot mutate the index.
+Host, port, and transport live under `[serve]` in `fundus.toml`.
 
 The server reads `fundus.toml` **once, at startup**. After adding or removing a
 source, restart it — otherwise the `sources` tool (and `locate`) keeps
 answering from the old config, while `search` already reflects the index. With
-the launchd job that is `sudo launchctl kickstart -k system/<prefix>.serve`;
-with the systemd unit below, `systemctl --user restart fundus-serve`.
+the launchd job that is `fundus service restart --serve` (it targets the right
+launchd domain for both LaunchAgent and `--daemon` installs); with the systemd
+unit below, `systemctl --user restart fundus-serve`.
 
 To keep it running:
 

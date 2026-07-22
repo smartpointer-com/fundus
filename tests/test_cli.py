@@ -161,3 +161,90 @@ def test_cli_index_exits_zero_when_all_sources_succeed(tmp_path, monkeypatch):
     result = runner.invoke(app, ["index", "--config", str(f)])
     assert result.exit_code == 0
     assert "FAILED" not in result.output
+
+
+class _FakeManifestSink:
+    def __init__(self, manifest):
+        self._m = manifest
+
+    def indexed_manifest(self, source):
+        return dict(self._m.get(source, {}))
+
+
+def _reparse_config(tmp_path):
+    f = tmp_path / "fundus.toml"
+    f.write_text(
+        f'[storage]\ndata_dir = "{tmp_path / "store"}"\n'
+        '[[sources]]\nname = "mail"\ntype = "notmuch"\n'
+        f'[[sources]]\nname = "docs"\ntype = "files"\nroots = ["{tmp_path}"]\n'
+    )
+    return f
+
+
+def test_cli_reparse_dry_run_selects_ocr_only(tmp_path, monkeypatch):
+    from fundus.models import FileStat, ManifestEntry
+
+    manifest = {"docs": {
+        "/t/a.pdf": ManifestEntry(FileStat(1, 1.0), "docling-serve:easyocr", True),
+        "/t/b.pdf": ManifestEntry(FileStat(1, 1.0), "tika:", False),
+    }}
+    monkeypatch.setattr("fundus.cli.build_sink", lambda cfg: _FakeManifestSink(manifest))
+    result = runner.invoke(
+        app, ["reparse", "--ocr-only", "--dry-run", "--config", str(_reparse_config(tmp_path))]
+    )
+    assert result.exit_code == 0
+    assert "docs: would re-parse 1 documents" in result.output
+    assert "mail" not in result.output  # non-tree sources are silently out of scope
+
+
+def test_cli_reparse_path_prefix_filters(tmp_path, monkeypatch):
+    from fundus.models import FileStat, ManifestEntry
+
+    manifest = {"docs": {
+        "/x/a.pdf": ManifestEntry(FileStat(1, 1.0), "tika:", False),
+        "/y/b.pdf": ManifestEntry(FileStat(1, 1.0), "tika:", False),
+    }}
+    monkeypatch.setattr("fundus.cli.build_sink", lambda cfg: _FakeManifestSink(manifest))
+    result = runner.invoke(
+        app,
+        ["reparse", "--path-prefix", "/x/", "--dry-run", "--config", str(_reparse_config(tmp_path))],
+    )
+    assert result.exit_code == 0
+    assert "docs: would re-parse 1 documents" in result.output
+
+
+def test_cli_reparse_rejects_non_tree_source(tmp_path, monkeypatch):
+    monkeypatch.setattr("fundus.cli.build_sink", lambda cfg: _FakeManifestSink({}))
+    result = runner.invoke(
+        app, ["reparse", "--source", "mail", "--dry-run", "--config", str(_reparse_config(tmp_path))]
+    )
+    assert result.exit_code == 2
+    assert "not a file-tree source" in result.output
+
+
+def test_cli_reparse_rejects_unknown_source(tmp_path, monkeypatch):
+    monkeypatch.setattr("fundus.cli.build_sink", lambda cfg: _FakeManifestSink({}))
+    result = runner.invoke(
+        app, ["reparse", "--source", "nope", "--dry-run", "--config", str(_reparse_config(tmp_path))]
+    )
+    assert result.exit_code == 2
+    assert "no source named" in result.output
+
+
+def test_cli_reparse_runs_pipeline_on_selection(tmp_path, monkeypatch):
+    from fundus.models import FileStat, ManifestEntry
+
+    manifest = {"docs": {"/t/a.pdf": ManifestEntry(FileStat(1, 1.0), "docling-serve:x", True)}}
+    calls = []
+
+    class _StubReparsePipeline:
+        def reparse(self, source, nids):
+            calls.append((source.name, sorted(nids)))
+            return {"selected": 1, "reparsed": 1, "missing": 0, "failed": 0, "chunks": 3}
+
+    monkeypatch.setattr("fundus.cli.build_sink", lambda cfg: _FakeManifestSink(manifest))
+    monkeypatch.setattr("fundus.cli.build_pipeline", lambda cfg, **kw: _StubReparsePipeline())
+    result = runner.invoke(app, ["reparse", "--config", str(_reparse_config(tmp_path))])
+    assert result.exit_code == 0
+    assert calls == [("docs", ["/t/a.pdf"])]
+    assert "docs: re-parsed 1/1 documents (3 chunks, 0 failed, 0 vanished)" in result.output

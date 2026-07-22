@@ -41,6 +41,17 @@ class EscalatingExtractor:
         self._max_bytes = max_bytes
         # Distinct version so escalate results cache separately from a single-engine run.
         self.version = f"{version}+{fast.name}/{quality.name}"
+        # The router itself never authors a result (inner engines stamp their own
+        # fingerprints), but the protocol wants one; compose it for completeness.
+        self.fingerprint = f"{fast.name}={fast.fingerprint},{quality.name}={quality.fingerprint}"
+
+    def engine_fingerprints(self) -> dict[str, str]:
+        """Current fingerprint per inner engine name — the 'expected' side of the staleness
+        check for documents this router produced (each result names its inner engine)."""
+        return {
+            self._fast.name: self._fast.fingerprint,
+            self._quality.name: self._quality.fingerprint,
+        }
 
     def extract(self, req: ExtractRequest) -> ExtractionResult:
         # First pass forces OCR off: a scanned PDF then yields ~no text and escalates to the quality

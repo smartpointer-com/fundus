@@ -146,6 +146,7 @@ class _FakeEngine:
     def __init__(self, name, text="", fail=False, ocr_text=None):
         self.name = name
         self.version = "1"
+        self.fingerprint = ""
         self._text = text
         self._fail = fail
         self._ocr_text = ocr_text  # returned instead of text when OCR is forced
@@ -282,3 +283,28 @@ def test_docling_exclusive_holds_all_permits():
     with ext._exclusive():
         assert ext._sem.acquire(blocking=False) is False  # all permits held -> exclusive
     assert ext._sem.acquire(blocking=False) is True  # released afterwards
+
+
+def test_adapters_stamp_engine_fingerprint():
+    def handler(request):
+        if request.url.path == "/rmeta/text":
+            return httpx.Response(200, json=[{"X-TIKA:content": "x"}])
+        return httpx.Response(200, json={"document": {"md_content": "x"}})
+
+    docling = DoclingServeExtractor(
+        "http://docling:5001", client=_client(handler), ocr_engine="ocrmac"
+    )
+    assert docling.fingerprint == "ocrmac"
+    assert docling.extract(_req()).engine_fingerprint == "ocrmac"
+    plain = DoclingServeExtractor("http://docling:5001", client=_client(handler))
+    assert plain.fingerprint == ""  # engine default; nothing output-affecting configured
+    tika = TikaExtractor("http://tika:9998", client=_client(handler))
+    assert tika.fingerprint == ""
+    assert tika.extract(_req()).engine_fingerprint == ""
+
+
+def test_escalate_exposes_inner_engine_fingerprints():
+    fast, quality = _FakeEngine("tika", "x" * 200), _FakeEngine("docling-serve", "y" * 200)
+    quality.fingerprint = "ocrmac"
+    router = EscalatingExtractor(fast, quality, min_chars=100)
+    assert router.engine_fingerprints() == {"tika": "", "docling-serve": "ocrmac"}

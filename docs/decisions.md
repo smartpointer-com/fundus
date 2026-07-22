@@ -36,7 +36,8 @@ detail and intentionally not load-bearing.
 
 Lets multiple engines' outputs for the same document coexist (real A/B), and
 makes re-chunking / re-embedding free of re-extraction — important because OCR is
-expensive.
+expensive. The version in the key is a config pin, not the live engine version —
+see decision 16.
 
 ## 6. Embeddings: fan-out from the orchestrator, with a vector cache
 
@@ -132,3 +133,30 @@ The bare-metal server's lifecycle is managed as an opt-in `<prefix>.docling`
 launchd job (`[service.docling]`) so one `fundus service install` covers it
 alongside indexing and the MCP server. The launch command and its environment
 stay in the user's config, not the repo — this stays a generic toolkit.
+
+## 16. Extraction provenance in the index; the cache never auto-invalidates
+
+Two levers exist for "the indexed text is stale even though the file didn't
+change", and they are deliberately different mechanisms:
+
+**Deliberate config changes converge automatically.** Every document carries an
+`extract_sig` — the engine that produced its text plus that engine's
+output-affecting settings (`docling-serve:ocrmac`), stamped at extraction time
+and read back as part of the `--full` manifest. When configuration changes (a
+new `ocr_engine`), the nightly full reconcile finds the affected documents by
+sig drift and re-parses exactly those, bypassing the extraction-cache *read*
+(the cached row is the stale artifact; the fresh result overwrites it in
+place). Only documents produced by the changed engine re-parse — the escalating
+router's tika-served majority is untouched by a docling re-tune.
+
+**Engine upgrades do not auto-invalidate.** Engines update frequently and
+mostly without output-visible effect, so neither the cache key nor the sig
+tracks live engine versions — an upgrade alone re-OCRs nothing (auto-invalidating
+on version would be overly conservative and turn routine upgrades into
+surprise corpus-wide re-OCR nights). When an upgrade IS judged worth it, that's
+a human call, made explicit: `fundus reparse --ocr-only` (or `--path-prefix`,
+`--source`) re-extracts the selection through the same cache-bypassing refresh.
+`reparse` deletes a document's old chunks only after its fresh extraction
+succeeded, so an engine outage mid-run degrades to "nothing happened", never to
+lost documents. (Manual pinning via the engine `version` config field remains
+as a blunt fallback lever.)

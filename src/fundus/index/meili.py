@@ -13,7 +13,7 @@ from fundus.embed.config import DEFAULT_EMBEDDER
 from fundus.index.base import IndexSettings
 from fundus.index.query import group_by_parent, hybrid_search_params
 from fundus.index.settings import build_index_settings
-from fundus.models import FileStat, IndexDocument
+from fundus.models import FileStat, IndexDocument, ManifestEntry
 
 
 class MeiliSink:
@@ -96,20 +96,21 @@ class MeiliSink:
     def delete_missing(self, source: str, live_parent_ids: set[str]) -> int:
         return self.delete_parents(self._indexed_parent_ids(source) - live_parent_ids)
 
-    def indexed_fingerprints(self, source: str) -> dict[str, FileStat]:
-        """The indexed file manifest for a source: ``native_id -> (size, mtime)``.
+    def indexed_manifest(self, source: str) -> dict[str, ManifestEntry]:
+        """The indexed file manifest for a source: ``native_id -> (stat, extract_sig, ocr_used)``.
 
-        One row per file is enough (all chunks of a file share the fingerprint), so we
+        One row per file is enough (all chunks of a file share the manifest fields), so we
         dedupe by ``native_id``. Documents predating the fingerprint fields (size 0) are
         omitted, so they read as "not indexed" and get re-indexed once — self-healing.
+        Documents predating extract_sig/ocr_used read back as ""/False (never sig-stale).
         """
-        out: dict[str, FileStat] = {}
+        out: dict[str, ManifestEntry] = {}
         offset, limit = 0, self._fingerprint_page
         while True:
             res = self._index.get_documents(
                 {
                     "filter": f'source = "{source}"',
-                    "fields": ["native_id", "size", "mtime"],
+                    "fields": ["native_id", "size", "mtime", "extract_sig", "ocr_used"],
                     "limit": limit,
                     "offset": offset,
                 }
@@ -119,7 +120,11 @@ class MeiliSink:
                 rec = row if isinstance(row, dict) else dict(row)
                 nid, size = rec.get("native_id"), rec.get("size")
                 if nid and isinstance(size, int) and size > 0:
-                    out[str(nid)] = FileStat(size, float(rec.get("mtime") or 0.0))
+                    out[str(nid)] = ManifestEntry(
+                        FileStat(size, float(rec.get("mtime") or 0.0)),
+                        str(rec.get("extract_sig") or ""),
+                        bool(rec.get("ocr_used") or False),
+                    )
             if len(rows) < limit:
                 return out
             offset += limit

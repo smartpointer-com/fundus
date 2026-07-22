@@ -17,6 +17,7 @@ from fundus.models import DocMeta, EngineRef, ExtractionResult
 
 class TikaExtractor:
     name = "tika"
+    fingerprint = ""  # no output-affecting engine settings beyond per-request options
 
     def __init__(
         self,
@@ -60,6 +61,7 @@ class TikaExtractor:
         )
         return ExtractionResult(
             engine=EngineRef(name=self.name, version=self.version),
+            engine_fingerprint=self.fingerprint,
             blocks=text_to_blocks(text),
             markdown=text,
             metadata=meta,

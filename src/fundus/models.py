@@ -30,6 +30,19 @@ class FileStat(NamedTuple):
     mtime: float
 
 
+class ManifestEntry(NamedTuple):
+    """One indexed file's manifest row, read back from the index for ``--full`` reconciliation.
+
+    ``extract_sig`` records which engine (and which output-affecting settings) produced the
+    indexed text, so a deliberate extraction-config change marks the document stale without
+    any change to the file itself. Empty for documents indexed before the field existed.
+    """
+
+    stat: FileStat
+    extract_sig: str = ""
+    ocr_used: bool = False
+
+
 class TextPayload(BaseModel):
     """Already-textual content (e.g. an email body or a chat window).
 
@@ -129,6 +142,10 @@ class ExtractionResult(BaseModel):
     """
 
     engine: EngineRef
+    # The producing engine's output-affecting settings (its ``fingerprint``) at extraction
+    # time. Persisted with cached results so a cache hit still reports what actually
+    # produced it; None on results cached before the field existed.
+    engine_fingerprint: str | None = None
     blocks: list[Block] = Field(default_factory=list)
     markdown: str = ""
     metadata: DocMeta = Field(default_factory=DocMeta)
@@ -173,6 +190,12 @@ class IndexDocument(BaseModel):
     # indexed manifest and diffs it against the live tree to find edited/new/removed files.
     size: int = 0
     mtime: float = 0.0
+    # Extraction provenance: "<engine>:<engine fingerprint>" of the engine that produced the text,
+    # plus whether OCR ran. Stored, not filterable; `--full` compares extract_sig against the
+    # current configuration to re-parse documents whose extraction settings changed, and
+    # `fundus reparse --ocr-only` selects on ocr_used.
+    extract_sig: str = ""
+    ocr_used: bool = False
     # Fan-out only: a vector Fundus computed for this doc. Not a stored field — the sink lifts it
     # into Meili's `_vectors` on upsert and drops it from the document body.
     vector: list[float] | None = None

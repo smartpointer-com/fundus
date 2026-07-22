@@ -32,5 +32,10 @@ class ExtractRequest(BaseModel):
 class Extractor(Protocol):
     name: str
     version: str
+    # Output-affecting engine settings, canonicalized (e.g. docling's OCR engine choice).
+    # Deliberately EXCLUDES versions, URLs and timeouts: it changes only when configuration
+    # that changes the extracted text changes, and is compared (as part of the stored
+    # ``extract_sig``) during ``--full`` reconciliation to find stale documents.
+    fingerprint: str
 
     def extract(self, req: ExtractRequest) -> ExtractionResult: ...

@@ -10,7 +10,7 @@ from typing import Protocol, Sequence, runtime_checkable
 
 from pydantic import BaseModel, Field
 
-from fundus.models import FileStat, IndexDocument
+from fundus.models import IndexDocument, ManifestEntry
 
 
 class IndexSettings(BaseModel):
@@ -43,4 +43,4 @@ class Sink(Protocol):
 
     def delete_parents(self, parent_ids: set[str]) -> int: ...
 
-    def indexed_fingerprints(self, source: str) -> dict[str, FileStat]: ...
+    def indexed_manifest(self, source: str) -> dict[str, ManifestEntry]: ...

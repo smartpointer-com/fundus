@@ -84,13 +84,20 @@ def cache_key(extractor: Extractor, req: ExtractRequest) -> CacheKey:
 
 
 def extract_with_cache(
-    extractor: Extractor, cache: ExtractionCache, req: ExtractRequest
+    extractor: Extractor, cache: ExtractionCache, req: ExtractRequest, *, refresh: bool = False
 ) -> ExtractionResult:
-    """Return a cached extraction if present, else extract once and store it."""
+    """Return a cached extraction if present, else extract once and store it.
+
+    ``refresh`` skips the cache read (but still writes): the deliberate-staleness path.
+    The cache key ignores engine settings and live engine versions, so re-extracting
+    after a config change or engine upgrade requires bypassing the read — the fresh
+    result then overwrites the stale row under the same key.
+    """
     key = cache_key(extractor, req)
-    hit = cache.get(key)
-    if hit is not None:
-        return hit
+    if not refresh:
+        hit = cache.get(key)
+        if hit is not None:
+            return hit
     result = extractor.extract(req)
     cache.put(key, result)
     return result

@@ -51,3 +51,21 @@ def test_extract_with_cache_calls_once(tmp_path):
 def test_cache_key_varies_by_content():
     extractor = CountingExtractor()
     assert cache_key(extractor, _req(b"a")) != cache_key(extractor, _req(b"b"))
+
+
+def test_extract_with_cache_refresh_bypasses_read_and_overwrites(tmp_path):
+    class Versioned(CountingExtractor):
+        def extract(self, req):
+            res = super().extract(req)
+            res.markdown = f"v{self.calls}"
+            return res
+
+    cache = SqliteExtractionCache(tmp_path / "c.db")
+    extractor = Versioned()
+    assert extract_with_cache(extractor, cache, _req()).markdown == "v1"
+    # refresh skips the cache read: the engine runs again despite the existing row
+    assert extract_with_cache(extractor, cache, _req(), refresh=True).markdown == "v2"
+    assert extractor.calls == 2
+    # ...and the fresh result overwrote the row, so normal reads now serve it
+    assert extract_with_cache(extractor, cache, _req()).markdown == "v2"
+    assert extractor.calls == 2

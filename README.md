@@ -49,6 +49,13 @@ default `$XDG_DATA_HOME/fundus`, overridable via `[storage].data_dir` in the
 config. Run `fundus paths` to see the resolved locations. `make up`/`make down`
 manage the service stack from this repo.
 
+`fundus index --full` reconciles the index against reality (deletions, edits the
+mtime cursor can't see, and documents whose extraction settings changed since
+they were parsed). `fundus reparse --ocr-only` (or `--path-prefix`/`--source`)
+force-re-extracts selected documents past the cache — for when an extraction
+engine *upgrade* seems worth a re-OCR; a mere config change needs no manual
+step, the next `--full` converges it.
+
 ## Service jobs (macOS)
 
 `fundus service install` sets up up to four launchd jobs pointing at the installed CLI —

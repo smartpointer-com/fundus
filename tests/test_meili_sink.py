@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from fundus.index.base import IndexSettings
 from fundus.index.meili import MeiliSink
-from fundus.models import FileStat, IndexDocument
+from fundus.models import FileStat, IndexDocument, ManifestEntry
 
 
 class FakeIndex:
@@ -121,26 +121,33 @@ def test_delete_parents_noop_on_empty():
     assert idx.deleted == []  # no filter-delete issued for an empty set
 
 
-def test_indexed_fingerprints_dedupes_and_skips_unfingerprinted():
+def test_indexed_manifest_dedupes_and_skips_unfingerprinted():
     docs = [
-        {"native_id": "a", "size": 10, "mtime": 100.5},
-        {"native_id": "a", "size": 10, "mtime": 100.5},  # another chunk of the same file
-        {"native_id": "b", "size": 20, "mtime": 200.0},
+        {"native_id": "a", "size": 10, "mtime": 100.5, "extract_sig": "tika:", "ocr_used": False},
+        {"native_id": "a", "size": 10, "mtime": 100.5, "extract_sig": "tika:"},  # same file, chunk 2
+        {"native_id": "b", "size": 20, "mtime": 200.0, "extract_sig": "docling-serve:ocrmac",
+         "ocr_used": True},
         {"native_id": "c", "size": 0, "mtime": 0.0},  # legacy doc without a fingerprint -> skipped
+        {"native_id": "d", "size": 5, "mtime": 50.0},  # pre-extract_sig doc -> empty sig
     ]
     idx = FakeIndex(documents=docs)
     sink = MeiliSink(index="c", client=FakeClient(idx))
-    manifest = sink.indexed_fingerprints("docs")
-    assert manifest == {"a": FileStat(10, 100.5), "b": FileStat(20, 200.0)}
+    manifest = sink.indexed_manifest("docs")
+    assert manifest == {
+        "a": ManifestEntry(FileStat(10, 100.5), "tika:", False),
+        "b": ManifestEntry(FileStat(20, 200.0), "docling-serve:ocrmac", True),
+        "d": ManifestEntry(FileStat(5, 50.0), "", False),
+    }
     assert idx.doc_queries[0]["filter"] == 'source = "docs"'
+    assert "extract_sig" in idx.doc_queries[0]["fields"] and "ocr_used" in idx.doc_queries[0]["fields"]
 
 
-def test_indexed_fingerprints_paginates():
+def test_indexed_manifest_paginates():
     docs = [{"native_id": f"f{i}", "size": 1, "mtime": float(i)} for i in range(25)]
     idx = FakeIndex(documents=docs)
     sink = MeiliSink(index="c", client=FakeClient(idx))
     sink._fingerprint_page = 10  # small page size to force pagination
-    manifest = sink.indexed_fingerprints("docs")
+    manifest = sink.indexed_manifest("docs")
     assert len(manifest) == 25
     assert len(idx.doc_queries) == 3  # 10 + 10 + 5
 

@@ -69,6 +69,10 @@ url = "http://127.0.0.1:5001"
 #                          # Set "ocrmac" to use Apple Vision on a BARE-METAL macOS docling-serve — faster
 #                          # and better on mixed-language scans than the container default (EasyOCR on CPU),
 #                          # which can't reach Vision. Leave unset for any containerized/Linux deployment.
+#                          # Changing this marks the documents this engine produced as stale (extract_sig):
+#                          # the next `fundus index --full` re-parses exactly those, no cache surgery needed.
+#                          # (Engine UPGRADES never auto-re-parse; use `fundus reparse --ocr-only` when one
+#                          # seems worth it.)
 
 [extractor.engines.tika]
 url = "http://127.0.0.1:9998"

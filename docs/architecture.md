@@ -197,7 +197,12 @@ corpus-dependent, so it is deliberately swappable:
   engines degrade gracefully.
 - The **cache key includes the engine name + version + options**, so multiple
   engines' outputs for the same file coexist — enabling honest A/B and ensuring
-  re-chunking never re-extracts (never re-OCRs).
+  re-chunking never re-extracts (never re-OCRs). The version is a *config pin*,
+  not the live engine version: routine engine upgrades rarely change output
+  enough to matter, so they deliberately do NOT invalidate the cache. When a
+  re-extract IS wanted (a config change detected via `extract_sig`, or a manual
+  `fundus reparse`), the pipeline bypasses the cache *read* and the fresh result
+  overwrites the row under the same key.
 - `bakeoff/` runs the engines over a representative sample and reports
   (characters, tables, speed, failures) so the default engine is chosen
   **empirically** on the target corpus.
@@ -257,10 +262,28 @@ record for an incremental walk to observe. Two regimes, by source kind:
   what its mtime did. A re-indexed file's old chunks are cleared first, so a file
   that re-chunks into fewer pieces can't leave orphaned chunks behind.
 
-The fingerprint (`size`, `mtime`) is a stored, non-filterable field on each
-document — adding it triggers no index-settings change, and documents indexed
-before it existed simply read as "absent from the manifest" and get re-indexed
-once.
+  The manifest also carries each document's **extraction provenance**
+  (`extract_sig` = the producing engine plus its output-affecting settings, e.g.
+  `docling-serve:ocrmac`). An unedited file whose stored sig no longer matches
+  what the current configuration would produce — say the OCR engine changed —
+  re-parses through a cache-bypassing refresh, so a deliberate config change
+  converges on the next `--full` with no manual cache surgery. Only the engine
+  that produced a given document triggers this: re-tuning docling never
+  re-parses tika-produced documents.
+
+The fingerprint (`size`, `mtime`) and provenance (`extract_sig`, `ocr_used`) are
+stored, non-filterable fields on each document — adding them triggers no
+index-settings change, and documents indexed before they existed simply read as
+"absent from the manifest" (or as never-stale, for the sig) and converge on
+their next natural re-index.
+
+**`fundus reparse`** covers the remaining case: re-extraction nobody's diff can
+infer, e.g. after an engine *upgrade* judged worth a re-OCR (cache keys ignore
+live engine versions on purpose). It selects indexed file-tree documents
+(`--ocr-only`, `--path-prefix`, `--source`, `--dry-run`), re-extracts them with
+the cache bypassed, and — unlike the reconcile — deletes a document's old chunks
+only after its fresh extraction succeeded, so an engine outage mid-run can't
+wipe serviceable documents.
 
 ## Service jobs (`fundus service`)
 

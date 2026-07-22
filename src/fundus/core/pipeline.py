@@ -12,6 +12,7 @@ from __future__ import annotations
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from functools import partial
 
 import httpx
 import structlog
@@ -52,13 +53,19 @@ _MASS_DELETE_FLOOR = 100
 
 
 def to_extraction(
-    item: SourceItem, extractor: Extractor, cache: ExtractionCache, options: ExtractOptions
+    item: SourceItem,
+    extractor: Extractor,
+    cache: ExtractionCache,
+    options: ExtractOptions,
+    *,
+    refresh: bool = False,
 ) -> ExtractionResult:
     """Produce an engine-agnostic ExtractionResult for an item.
 
     Text payloads and text/* files never touch the extraction engine; only binary
-    documents do (cached). Tabular files return an empty placeholder — the tabular
-    chunker reads their bytes directly.
+    documents do (cached; ``refresh`` bypasses the cache read to force a re-extract).
+    Tabular files return an empty placeholder — the tabular chunker reads their
+    bytes directly.
     """
     if isinstance(item.payload, TextPayload):
         return ExtractionResult.from_text(item.payload.text)
@@ -84,7 +91,19 @@ def to_extraction(
         return ExtractionResult.from_text(data.decode("utf-8", errors="replace"))
 
     req = ExtractRequest(data=data, mime_type=mime, filename=item.title, options=options)
-    return extract_with_cache(extractor, cache, req)
+    return extract_with_cache(extractor, cache, req, refresh=refresh)
+
+
+def engine_fingerprints(extractor: Extractor) -> dict[str, str]:
+    """Current fingerprint per engine name that can author results under this extractor.
+
+    The escalating router reports its inner engines (results carry the inner engine's
+    name); a plain engine reports itself.
+    """
+    inner = getattr(extractor, "engine_fingerprints", None)
+    if callable(inner):
+        return dict(inner())
+    return {extractor.name: extractor.fingerprint}
 
 
 @dataclass
@@ -127,6 +146,33 @@ class Pipeline:
         self._retry_backoff = retry_backoff
         self._doc_embedder = doc_embedder
         self._embed_cache = embed_cache
+        # name -> current fingerprint for every engine that can author a result here;
+        # the "expected" side of the extract_sig staleness check.
+        self._engine_fps = engine_fingerprints(extractor)
+
+    def _extract_sig(self, extraction: ExtractionResult) -> str:
+        """Provenance stamp for an extraction: ``<engine>:<fingerprint>``.
+
+        Prefers the fingerprint recorded in the result (exact even on a cache hit);
+        results cached before the field existed fall back to the producing engine's
+        current fingerprint — a best effort that self-corrects on the next re-parse.
+        """
+        name = extraction.engine.name
+        fp = extraction.engine_fingerprint
+        if fp is None:
+            fp = self._engine_fps.get(name, "")
+        return f"{name}:{fp}"
+
+    def _sig_stale(self, sig: str) -> bool:
+        """Whether an indexed document's stored extract_sig no longer matches the engine
+        that would produce it today. Unknown engines and pre-feature docs (empty sig)
+        are never stale — they converge when the document naturally re-indexes, or via
+        ``fundus reparse``."""
+        if not sig or ":" not in sig:
+            return False
+        name, fp = sig.split(":", 1)
+        expected = self._engine_fps.get(name)
+        return expected is not None and fp != expected
 
     def index_settings(self) -> IndexSettings:
         return IndexSettings(locales=list(self._config.locales))
@@ -178,14 +224,25 @@ class Pipeline:
         for doc, vector in zip(docs, vectors, strict=True):
             doc.vector = vector
 
-    def _process_item(self, item: SourceItem) -> list[IndexDocument]:
+    def _process_item(
+        self, item: SourceItem, refresh_nids: set[str] | None = None
+    ) -> list[IndexDocument]:
         # Extraction can hit transient extractor-service failures (e.g. dropped connections when
         # the engine is briefly saturated). Retry with a short backoff; only skip the item after
         # exhausting attempts so one flaky request can't silently drop a document.
+        refresh = refresh_nids is not None and item.native_id in refresh_nids
         for attempt in range(1, self._max_attempts + 1):
             try:
-                doc = to_extraction(item, self._extractor, self._cache, self._options)
-                docs = [to_index_document(item, chunk) for chunk in chunker_for(item).chunk(doc, item)]
+                doc = to_extraction(
+                    item, self._extractor, self._cache, self._options, refresh=refresh
+                )
+                sig = self._extract_sig(doc)
+                docs = [
+                    to_index_document(
+                        item, chunk, extract_sig=sig, ocr_used=doc.metadata.ocr_used
+                    )
+                    for chunk in chunker_for(item).chunk(doc, item)
+                ]
                 self._embed(docs)
                 return docs
             except Exception as exc:  # noqa: BLE001 - one bad item must not abort the whole index
@@ -207,12 +264,16 @@ class Pipeline:
                 return []
         return []  # unreachable; satisfies the type checker
 
-    def _drain(self, items: Iterable[SourceItem]) -> int:
-        """Process items through the worker pool, batching upserts; return chunks written."""
+    def _drain(self, items: Iterable[SourceItem], refresh_nids: set[str] | None = None) -> int:
+        """Process items through the worker pool, batching upserts; return chunks written.
+
+        Items whose native_id is in ``refresh_nids`` re-extract through the cache-bypassing
+        refresh path (their indexed text was produced under superseded extraction settings)."""
         batch: list[IndexDocument] = []
         total = 0
         # Workers extract + chunk concurrently; the main thread batches the upserts.
-        for docs in parallel_map(items, self._process_item, workers=self._workers):
+        process = partial(self._process_item, refresh_nids=refresh_nids)
+        for docs in parallel_map(items, process, workers=self._workers):
             batch.extend(docs)
             total += len(docs)
             if len(batch) >= self._batch:
@@ -245,35 +306,78 @@ class Pipeline:
     def _reconcile_tree(self, source: TreeSource, *, allow_mass_delete: bool = False) -> int:
         """Rsync-style ``--full`` for a file tree: diff the live tree's fingerprints against the
         indexed manifest, re-index new/edited files and drop removed ones — independent of the
-        mtime cursor, so an edit is caught even if its mtime regressed or never moved."""
+        mtime cursor, so an edit is caught even if its mtime regressed or never moved. Unedited
+        files whose stored extract_sig no longer matches the current extraction configuration
+        (e.g. a different OCR engine) re-parse through the cache-bypassing refresh path."""
         disk = dict(source.fingerprints())
-        indexed = self._sink.indexed_fingerprints(source.name)
-        changed, removed = diff_tree(disk, indexed)
+        manifest = self._sink.indexed_manifest(source.name)
+        changed, removed = diff_tree(disk, {nid: e.stat for nid, e in manifest.items()})
+        stale = {
+            nid
+            for nid, entry in manifest.items()
+            if nid in disk and nid not in changed and self._sig_stale(entry.extract_sig)
+        }
+        if stale:
+            log.info(
+                "extraction settings changed; re-parsing", source=source.name, stale=len(stale)
+            )
         # Guardrail against mass pruning: when a large share of the manifest reads as removed,
         # an incomplete enumeration (unmounted volume, permission failure, resource exhaustion)
         # is as likely as a genuine mass deletion — and pruning on a bad read is destructive.
         # Abort by default; an intentional purge re-runs with --allow-mass-delete.
-        if not allow_mass_delete and len(removed) > max(_MASS_DELETE_FLOOR, len(indexed) // 4):
+        if not allow_mass_delete and len(removed) > max(_MASS_DELETE_FLOOR, len(manifest) // 4):
             raise RuntimeError(
-                f"refusing to prune {len(removed)} of {len(indexed)} indexed files for source "
+                f"refusing to prune {len(removed)} of {len(manifest)} indexed files for source "
                 f"{source.name!r}: either the live tree is incompletely enumerated, or this is "
                 "a deliberate mass deletion — re-run with --allow-mass-delete if it is"
             )
         # Clear changed parents too (not just removed): a file that re-chunks into fewer pieces
         # would otherwise leave orphaned high-seq chunks behind under the same parent id.
-        dead = {parent_id(source.name, nid) for nid in changed | removed}
+        dead = {parent_id(source.name, nid) for nid in changed | stale | removed}
         self._sink.delete_parents(dead)
-        items = (item for nid in changed if (item := source.load(nid)) is not None)
-        total = self._drain(items)
+        items = (item for nid in changed | stale if (item := source.load(nid)) is not None)
+        total = self._drain(items, refresh_nids=stale)
         self._state.set_cursor(source.name, source.current_cursor())
         log.info(
             "reconciled",
             source=source.name,
             reindexed=len(changed),
+            reparsed=len(stale),
             removed=len(removed),
             chunks=total,
         )
         return total
+
+    def reparse(self, source: TreeSource, native_ids: Iterable[str]) -> dict[str, int]:
+        """Force-re-extract selected indexed files, bypassing the extraction cache.
+
+        For engine upgrades (the cache key deliberately ignores live engine versions) or
+        any other suspicion of stale text. Unlike ``_reconcile_tree`` this deletes a
+        document's old chunks only AFTER its fresh extraction succeeded, so an engine
+        outage mid-run cannot wipe serviceable documents from the index.
+        """
+        nids = sorted(set(native_ids))
+        counts = {"selected": len(nids), "reparsed": 0, "missing": 0, "failed": 0, "chunks": 0}
+
+        def work(nid: str) -> tuple[str, list[IndexDocument] | None]:
+            item = source.load(nid)
+            if item is None:
+                return nid, None
+            return nid, self._process_item(item, refresh_nids={nid})
+
+        for nid, docs in parallel_map(nids, work, workers=self._workers):
+            if docs is None:  # vanished from disk since the manifest was read
+                counts["missing"] += 1
+                continue
+            if not docs:  # extraction failed after retries; keep the old chunks
+                counts["failed"] += 1
+                continue
+            self._sink.delete_parents({parent_id(source.name, nid)})
+            self._sink.upsert(docs)
+            counts["reparsed"] += 1
+            counts["chunks"] += len(docs)
+        log.info("reparsed", source=source.name, **counts)
+        return counts
 
 
 def _query_embedder(config: FundusConfig) -> EmbeddingClient | None:

@@ -14,17 +14,22 @@ from fundus.models import (
     EngineRef,
     ExtractionResult,
     FileStat,
+    ManifestEntry,
     SourceItem,
     TextPayload,
 )
 
 
 class FakeSink:
-    def __init__(self, fingerprints=None):
+    def __init__(self, manifest=None):
         self.docs = []
         self.deleted = []
         self.deleted_parents = []
-        self._fingerprints = fingerprints or {}
+        # Accept plain FileStat values for convenience; normalize to ManifestEntry.
+        self._manifest = {
+            nid: v if isinstance(v, ManifestEntry) else ManifestEntry(v)
+            for nid, v in (manifest or {}).items()
+        }
 
     def ensure_schema(self, settings):
         pass
@@ -40,13 +45,14 @@ class FakeSink:
         self.deleted_parents.append(set(parent_ids))
         return len(parent_ids)
 
-    def indexed_fingerprints(self, source):
-        return dict(self._fingerprints)
+    def indexed_manifest(self, source):
+        return dict(self._manifest)
 
 
 class FakeExtractor:
     name = "fake"
     version = "1"
+    fingerprint = ""
 
     def __init__(self):
         self.calls = 0
@@ -313,9 +319,10 @@ class FakeTreeSource:
 
     type = "files"
 
-    def __init__(self, name, files):
+    def __init__(self, name, files, mime="text/plain"):
         self.name = name  # files: native_id -> (FileStat, bytes)
         self._files = files
+        self._mime = mime  # application/pdf routes loads through the extraction engine
 
     def changed(self, cursor):
         return iter([])
@@ -331,10 +338,12 @@ class FakeTreeSource:
             yield nid, stat
 
     def load(self, native_id):
+        if native_id not in self._files:  # mirrors FilesSource: a vanished file loads as None
+            return None
         stat, data = self._files[native_id]
         return SourceItem(
             source=self.name, type="files", native_id=native_id, item_kind="file",
-            title=native_id, path=native_id, mime_type="text/plain",
+            title=native_id, path=native_id, mime_type=self._mime,
             size=stat.size, mtime=stat.mtime, ts=datetime(2024, 1, 1),
             payload=BlobPayload(data=data),
         )
@@ -344,7 +353,7 @@ def test_full_tree_reconcile_reindexes_changed_and_drops_removed():
     # Indexed: a + b. On disk: a edited (size/mtime differ), c new, b gone.
     indexed = {"a": FileStat(2, 100.0), "b": FileStat(2, 100.0)}
     disk = {"a": (FileStat(3, 200.0), b"aaa"), "c": (FileStat(2, 100.0), b"cc")}
-    sink = FakeSink(fingerprints=indexed)
+    sink = FakeSink(manifest=indexed)
     src = FakeTreeSource("docs", disk)
     n = Pipeline(FundusConfig(), sink, FakeExtractor(), DictCache(), DictState(), batch_size=10).index_source(
         src, full=True
@@ -362,7 +371,7 @@ def test_full_tree_reconcile_reindexes_changed_and_drops_removed():
 def test_full_tree_reconcile_skips_unchanged():
     indexed = {"a": FileStat(2, 100.0)}
     disk = {"a": (FileStat(2, 100.0), b"aa")}  # identical fingerprint
-    sink = FakeSink(fingerprints=indexed)
+    sink = FakeSink(manifest=indexed)
     n = Pipeline(FundusConfig(), sink, FakeExtractor(), DictCache(), DictState()).index_source(
         FakeTreeSource("docs", disk), full=True
     )
@@ -375,7 +384,7 @@ def test_full_tree_reconcile_refuses_mass_prune():
     # permission failure, resource exhaustion): abort loudly, never prune.
     indexed = {f"f{i}": FileStat(2, 100.0) for i in range(1000)}
     disk = {f"f{i}": (FileStat(2, 100.0), b"aa") for i in range(400)}  # 600 "removed" > 25%
-    sink = FakeSink(fingerprints=indexed)
+    sink = FakeSink(manifest=indexed)
     pipeline = Pipeline(FundusConfig(), sink, FakeExtractor(), DictCache(), DictState())
     with pytest.raises(RuntimeError, match="refusing to prune"):
         pipeline.index_source(FakeTreeSource("docs", disk), full=True)
@@ -389,7 +398,7 @@ def test_full_tree_reconcile_allows_bounded_prune():
     # Under both bounds (25% and the absolute floor): a genuine deletion goes through.
     indexed = {f"f{i}": FileStat(2, 100.0) for i in range(1000)}
     disk = {f"f{i}": (FileStat(2, 100.0), b"aa") for i in range(800)}  # 200 removed, 20%
-    sink = FakeSink(fingerprints=indexed)
+    sink = FakeSink(manifest=indexed)
     Pipeline(FundusConfig(), sink, FakeExtractor(), DictCache(), DictState()).index_source(
         FakeTreeSource("docs", disk), full=True
     )
@@ -424,3 +433,133 @@ def test_index_contains_a_failing_source_and_still_runs_the_rest(monkeypatch):
     assert "1700000000.123456" in report.failures["slack"]
     assert state.get_cursor("documents") == "C1"  # the source *after* the failure advanced
     assert state.get_cursor("slack") is None  # the broken one did not
+
+
+def test_docs_carry_extract_sig_and_ocr_used():
+    class OcrExtractor(FakeExtractor):
+        name = "docling-serve"
+        fingerprint = "ocrmac"
+
+        def extract(self, req):
+            self.calls += 1
+            return ExtractionResult(
+                engine=EngineRef(name="docling-serve", version="1"),
+                engine_fingerprint="ocrmac",
+                blocks=[Block(type="paragraph", text="scanned text")],
+                markdown="scanned text",
+                metadata=DocMeta(ocr_used=True),
+            )
+
+    sink = FakeSink()
+    item = _item(source="docs", native_id="s.pdf", mime_type="application/pdf",
+                 payload=BlobPayload(data=b"%PDF"))
+    _pipeline(sink, OcrExtractor()).index_source(FakeSource("docs", [item]))
+    assert sink.docs and all(d.extract_sig == "docling-serve:ocrmac" for d in sink.docs)
+    assert all(d.ocr_used for d in sink.docs)
+
+
+def test_legacy_cached_result_sig_falls_back_to_current_fingerprint():
+    # Results cached before engine_fingerprint existed deserialize with None; the sig then
+    # falls back to the producing engine's CURRENT fingerprint (FakeExtractor stamps nothing).
+    sink, ex = FakeSink(), FakeExtractor()
+    item = _item(source="docs", native_id="f.pdf", mime_type="application/pdf",
+                 payload=BlobPayload(data=b"PDFBYTES"))
+    _pipeline(sink, ex).index_source(FakeSource("docs", [item]))
+    assert sink.docs and all(d.extract_sig == "fake:" for d in sink.docs)
+
+
+class _SigEngine(FakeExtractor):
+    """Extractor whose fingerprint and output are parameterized per test."""
+
+    def __init__(self, fingerprint, text):
+        super().__init__()
+        self.fingerprint = fingerprint
+        self._text = text
+
+    def extract(self, req):
+        self.calls += 1
+        return ExtractionResult(
+            engine=EngineRef(name="fake", version="1"),
+            engine_fingerprint=self.fingerprint,
+            blocks=[Block(type="paragraph", text=self._text)],
+            markdown=self._text,
+        )
+
+
+def test_full_tree_reconcile_reparses_on_extract_sig_drift():
+    # File unchanged on disk, but its indexed text was produced under superseded extraction
+    # settings: the reconcile must re-parse it, bypassing the cache read (the cached row IS
+    # the stale artifact — same content hash, same engine name/version, same options).
+    stat = FileStat(2, 100.0)
+    disk = {"a": (stat, b"aa")}
+    cache = DictCache()
+    src = FakeTreeSource("docs", disk, mime="application/pdf")
+    # Seed the cache under the OLD settings.
+    Pipeline(FundusConfig(), FakeSink(), _SigEngine("OLD", "OLD TEXT"), cache, DictState()).index_source(
+        src, full=True
+    )
+    sink = FakeSink(manifest={"a": ManifestEntry(stat, "fake:OLD", False)})
+    ex = _SigEngine("NEW", "NEW TEXT")
+    Pipeline(FundusConfig(), sink, ex, cache, DictState()).index_source(src, full=True)
+    assert ex.calls == 1  # the cached OLD row was bypassed, not served
+    assert any("NEW TEXT" in d.body for d in sink.docs)
+    assert all(d.extract_sig == "fake:NEW" for d in sink.docs)
+    assert sink.deleted_parents[0] == {parent_id("docs", "a")}  # old chunks cleared
+
+
+def test_full_tree_reconcile_ignores_missing_and_foreign_sigs():
+    # Pre-feature docs (empty sig) and docs produced by an engine the current extractor
+    # doesn't know must NOT re-parse: they converge on their natural re-index or via reparse.
+    stat = FileStat(2, 100.0)
+    disk = {"a": (stat, b"aa"), "b": (stat, b"bb")}
+    sink = FakeSink(manifest={
+        "a": ManifestEntry(stat, "", False),
+        "b": ManifestEntry(stat, "someother:xyz", False),
+    })
+    ex = FakeExtractor()
+    Pipeline(FundusConfig(), sink, ex, DictCache(), DictState()).index_source(
+        FakeTreeSource("docs", disk, mime="application/pdf"), full=True
+    )
+    assert ex.calls == 0 and sink.docs == []
+
+
+def test_reparse_bypasses_cache_and_replaces_docs():
+    stat = FileStat(2, 100.0)
+    disk = {"a": (stat, b"aa"), "b": (stat, b"bb")}
+    src = FakeTreeSource("docs", disk, mime="application/pdf")
+    cache, ex = DictCache(), FakeExtractor()
+    Pipeline(FundusConfig(), FakeSink(), ex, cache, DictState()).index_source(src, full=True)
+    seeded = ex.calls
+
+    sink = FakeSink()
+    counts = Pipeline(FundusConfig(), sink, ex, cache, DictState()).reparse(src, ["a"])
+    assert ex.calls == seeded + 1  # re-extracted "a" despite its cache row
+    assert counts["reparsed"] == 1 and counts["selected"] == 1 and counts["chunks"] >= 1
+    assert {d.native_id for d in sink.docs} == {"a"}
+    assert sink.deleted_parents == [{parent_id("docs", "a")}]
+
+
+def test_reparse_keeps_old_docs_when_extraction_fails():
+    stat = FileStat(2, 100.0)
+    src = FakeTreeSource("docs", {"a": (stat, b"aa")}, mime="application/pdf")
+
+    class Broken(FakeExtractor):
+        def extract(self, req):
+            self.calls += 1
+            raise RuntimeError("engine down")
+
+    sink = FakeSink()
+    counts = Pipeline(
+        FundusConfig(), sink, Broken(), DictCache(), DictState(), retry_backoff=0.0
+    ).reparse(src, ["a"])
+    assert counts["failed"] == 1 and counts["reparsed"] == 0
+    # Nothing deleted and nothing upserted: the old chunks survive an engine outage.
+    assert sink.deleted_parents == [] and sink.docs == []
+
+
+def test_reparse_counts_vanished_files():
+    src = FakeTreeSource("docs", {}, mime="application/pdf")
+    counts = Pipeline(FundusConfig(), FakeSink(), FakeExtractor(), DictCache(), DictState()).reparse(
+        src, ["gone"]
+    )
+    assert counts == {"selected": 1, "reparsed": 0, "missing": 1, "failed": 0, "chunks": 0}

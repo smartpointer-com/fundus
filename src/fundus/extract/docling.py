@@ -65,6 +65,7 @@ class DoclingServeExtractor:
         # OCR engine to request per call (e.g. "ocrmac" for Apple Vision on a bare-metal macOS
         # server). None → omit the field and let docling-serve pick its own default.
         self._ocr_engine = ocr_engine
+        self.fingerprint = ocr_engine or ""
         # docling-serve drops queued connections when flooded; bound in-flight requests so the
         # indexing worker pool can be sized for embedding concurrency without overwhelming it.
         self._max_concurrency = max_concurrency
@@ -135,6 +136,7 @@ class DoclingServeExtractor:
             md = "\n\n".join(filter(None, [md, *salvaged]))
         return ExtractionResult(
             engine=EngineRef(name=self.name, version=self.version),
+            engine_fingerprint=self.fingerprint,
             blocks=blocks,
             markdown=md,
             metadata=DocMeta(ocr_used=ocr),

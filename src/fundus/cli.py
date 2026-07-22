@@ -38,7 +38,8 @@ def index(
     full: bool = typer.Option(
         False,
         help="Reconcile against reality: prune deletions, and for file trees re-index edits "
-        "(by size+mtime) the cursor can't see.",
+        "(by size+mtime) the cursor can't see and re-parse documents whose extraction "
+        "settings changed (extract_sig drift).",
     ),
     force: bool = typer.Option(False, help="Ignore saved cursors and re-read everything."),
     allow_mass_delete: bool = typer.Option(
@@ -69,6 +70,74 @@ def index(
         # Exit non-zero so the failure is visible in launchd's LastExitStatus; the sources
         # that did run have already committed their cursors, so a retry is cheap.
         raise typer.Exit(code=1)
+
+
+@app.command()
+def reparse(
+    source: str | None = typer.Option(None, help="Limit to a single file-tree source by name."),
+    ocr_only: bool = typer.Option(
+        False, "--ocr-only", help="Only documents whose indexed text came from OCR."
+    ),
+    path_prefix: list[str] = typer.Option(
+        [], "--path-prefix", help="Only documents whose id/path starts with PREFIX (repeatable)."
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Report how many documents would re-parse; change nothing."
+    ),
+    workers: int | None = typer.Option(None, help="Override the indexing worker count."),
+    config: Path | None = ConfigOpt,
+) -> None:
+    """Force selected indexed documents to re-extract from their source bytes, bypassing the
+    extraction cache (the fresh result overwrites the cached row), then re-chunk/re-embed/
+    re-upsert. For re-extraction WITHOUT any file change: after an engine upgrade judged worth
+    a re-OCR (cache keys deliberately ignore live engine versions), or any other reason to
+    distrust indexed text. File-tree sources only. Note a config change (e.g. a new ocr_engine)
+    needs no manual reparse — the next --full reconcile spots the extract_sig drift itself."""
+    from fundus.sources.base import TreeSource
+    from fundus.sources.registry import build_source
+
+    cfg = load_config(config)
+    if workers is not None:
+        cfg.workers = workers
+    sink = build_sink(cfg)
+    targets = []
+    for scfg in cfg.sources:
+        if source and scfg.name != source:
+            continue
+        src = build_source(scfg)
+        if not isinstance(src, TreeSource):
+            if source:  # explicitly requested a source reparse cannot serve
+                typer.echo(f"{scfg.name}: not a file-tree source (reparse re-reads files)", err=True)
+                raise typer.Exit(code=2)
+            continue
+        manifest = sink.indexed_manifest(scfg.name)
+        nids = [
+            nid
+            for nid, entry in manifest.items()
+            if (not ocr_only or entry.ocr_used)
+            and (not path_prefix or any(nid.startswith(p) for p in path_prefix))
+        ]
+        targets.append((scfg.name, src, nids))
+    if source and not targets:
+        typer.echo(f"no source named {source!r} configured", err=True)
+        raise typer.Exit(code=2)
+    if dry_run:
+        for name, _src, nids in targets:
+            typer.echo(f"{name}: would re-parse {len(nids)} documents")
+        return
+    pipeline = build_pipeline(cfg, sink=sink)
+    try:
+        with run_lock(str(cfg.lock_path())):
+            for name, src, nids in targets:
+                counts = pipeline.reparse(src, nids)
+                typer.echo(
+                    f"{name}: re-parsed {counts['reparsed']}/{counts['selected']} documents "
+                    f"({counts['chunks']} chunks, {counts['failed']} failed, "
+                    f"{counts['missing']} vanished)"
+                )
+    except AlreadyRunning:
+        typer.echo("Another fundus run holds the lock; skipping.")
+        raise typer.Exit(code=0) from None
 
 
 @app.command()

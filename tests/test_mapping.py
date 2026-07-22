@@ -40,3 +40,13 @@ def test_chat_mapping_uses_meta():
     assert doc.msg_ids == ["1", "2"]
     assert doc.ts == 1700000000
     assert doc.actors == ["a"]
+
+
+def test_mapping_carries_extraction_provenance():
+    chunk = Chunk(parent_id="p", seq=0, text="x")
+    doc = to_index_document(_item(), chunk, extract_sig="docling-serve:ocrmac", ocr_used=True)
+    assert doc.extract_sig == "docling-serve:ocrmac"
+    assert doc.ocr_used is True
+    # defaults stay empty for callers that don't extract (text payloads, tests)
+    plain = to_index_document(_item(), chunk)
+    assert plain.extract_sig == "" and plain.ocr_used is False

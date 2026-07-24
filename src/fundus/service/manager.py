@@ -54,7 +54,7 @@ def is_editable_install() -> bool:
         if not raw:
             return False
         return bool(json.loads(raw).get("dir_info", {}).get("editable"))
-    except Exception:  # noqa: BLE001 - absence of metadata just means "can't prove editable"
+    except Exception:  # absence of metadata just means "can't prove editable"
         return False
 
 

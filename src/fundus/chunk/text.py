@@ -54,7 +54,7 @@ def _split_text(text: str, max_tokens: int) -> list[str]:
 
 
 class _Seg:
-    __slots__ = ("text", "hpath", "page", "tokens", "is_heading")
+    __slots__ = ("hpath", "is_heading", "page", "text", "tokens")
 
     def __init__(
         self, text: str, hpath: list[str], page: int | None, is_heading: bool = False

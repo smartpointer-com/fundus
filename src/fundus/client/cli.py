@@ -55,11 +55,10 @@ async def _call(endpoint: str, token: str | None, transport: str, tool: str, arg
         from mcp.client.streamable_http import streamablehttp_client
 
         cm = streamablehttp_client(endpoint, headers=headers)
-    async with cm as streams:
-        async with ClientSession(streams[0], streams[1]) as session:
-            await session.initialize()
-            payload = {k: v for k, v in args.items() if v is not None}
-            return _payload(await session.call_tool(tool, payload))
+    async with cm as streams, ClientSession(streams[0], streams[1]) as session:
+        await session.initialize()
+        payload = {k: v for k, v in args.items() if v is not None}
+        return _payload(await session.call_tool(tool, payload))
 
 
 def _resolve(cfg: FundusConfig, url: str | None, token: str | None, transport: str | None) -> tuple[str, str | None, str]:
@@ -91,7 +90,7 @@ def _invoke(cfg: FundusConfig, url: str | None, token: str | None, transport: st
     endpoint, tok, tr = _resolve(cfg, url, token, transport)
     try:
         return asyncio.run(_call(endpoint, tok, tr, tool, args))
-    except Exception as exc:  # noqa: BLE001 - surface any transport/auth failure as a clean message
+    except Exception as exc:  # surface any transport/auth failure as a clean message
         typer.echo(f"fundus-client: {_failure_message(endpoint, bool(tok), _unwrap(exc))}", err=True)
         raise typer.Exit(code=1) from None
 

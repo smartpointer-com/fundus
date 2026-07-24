@@ -19,18 +19,18 @@ def _pretend_darwin(monkeypatch):
 
 
 def _plan(kind="agent", **kw):
-    base = dict(
-        kind=kind,
-        label_prefix="com.test.fundus",
-        fundus_bin="/opt/pipx/fundus",
-        config_path="/home/u/.config/fundus.toml",
-        logs_dir="/home/u/fundus/logs",
-        interval_minutes=30,
-        full_at="04:00",
-        home="/home/u",
-        username="u",
-        groupname="staff",
-    )
+    base = {
+        "kind": kind,
+        "label_prefix": "com.test.fundus",
+        "fundus_bin": "/opt/pipx/fundus",
+        "config_path": "/home/u/.config/fundus.toml",
+        "logs_dir": "/home/u/fundus/logs",
+        "interval_minutes": 30,
+        "full_at": "04:00",
+        "home": "/home/u",
+        "username": "u",
+        "groupname": "staff",
+    }
     base.update(kw)
     return Plan(**base)
 
@@ -61,7 +61,7 @@ def test_fundus_command_is_a_direct_exec():
 
 
 def test_agent_jobs_have_no_owner_and_right_schedule():
-    inc, full, srv = _plan("agent").jobs()
+    inc, full, _srv = _plan("agent").jobs()
     assert inc.label == "com.test.fundus.index"
     assert full.label == "com.test.fundus.index-full"
     p_inc, p_full = inc.to_plist(), full.to_plist()

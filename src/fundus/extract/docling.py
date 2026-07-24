@@ -79,7 +79,7 @@ class DoclingServeExtractor:
         try:
             with self._sem:
                 return self._extract(req)
-        except Exception as exc:  # noqa: BLE001 - classify, then re-raise or retry exclusively
+        except Exception as exc:  # classify, then re-raise or retry exclusively
             if not _is_resource_failure(exc):
                 raise
             # Large/slow doc that likely lost a race for RAM/time with other conversions. Retry it

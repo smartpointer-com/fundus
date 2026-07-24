@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fundus.chunk.chat import ChatChunker
 from fundus.chunk.dispatch import chunker_for, is_tabular
@@ -14,7 +14,7 @@ def _item(kind, mime=None, payload=None):
         native_id="n",
         item_kind=kind,
         mime_type=mime,
-        ts=datetime(2024, 1, 1),
+        ts=datetime(2024, 1, 1, tzinfo=UTC),
         payload=payload or TextPayload(text="x"),
     )
 
@@ -41,7 +41,7 @@ def test_parse_sheets_csv_mislabeled_as_excel():
 
 def test_parse_sheets_strips_utf8_bom():
     from fundus.chunk.tabular import parse_sheets
-    data = "﻿Name,Value\nx,1\n".encode("utf-8")
+    data = "﻿Name,Value\nx,1\n".encode()
     assert parse_sheets(data, "application/vnd.ms-excel")[0][1][0] == ["Name", "Value"]
 
 

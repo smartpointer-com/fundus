@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -8,8 +8,8 @@ from fundus.core.ids import parent_id
 from fundus.core.pipeline import Pipeline, to_extraction
 from fundus.extract.base import ExtractOptions
 from fundus.models import (
-    Block,
     BlobPayload,
+    Block,
     DocMeta,
     EngineRef,
     ExtractionResult,
@@ -112,7 +112,7 @@ def _pipeline(sink, extractor):
 
 
 def _item(**kw):
-    base = dict(source="s", type="x", native_id="n", item_kind="file", ts=datetime(2024, 1, 1))
+    base = {"source": "s", "type": "x", "native_id": "n", "item_kind": "file", "ts": datetime(2024, 1, 1, tzinfo=UTC)}
     base.update(kw)
     return SourceItem(**base)
 
@@ -344,7 +344,7 @@ class FakeTreeSource:
         return SourceItem(
             source=self.name, type="files", native_id=native_id, item_kind="file",
             title=native_id, path=native_id, mime_type=self._mime,
-            size=stat.size, mtime=stat.mtime, ts=datetime(2024, 1, 1),
+            size=stat.size, mtime=stat.mtime, ts=datetime(2024, 1, 1, tzinfo=UTC),
             payload=BlobPayload(data=data),
         )
 
@@ -361,7 +361,7 @@ def test_full_tree_reconcile_reindexes_changed_and_drops_removed():
     reindexed = {d.native_id for d in sink.docs}
     assert reindexed == {"a", "c"}  # edited + new re-indexed; unchanged 'b' not touched
     assert n == len(sink.docs)
-    # Parents cleared = changed (a, c) ∪ removed (b), so stale chunks (incl. re-chunk orphans) go.
+    # Parents cleared = changed (a, c) plus removed (b), so stale chunks (incl. re-chunk orphans) go.
     assert sink.deleted_parents and sink.deleted_parents[0] == {
         parent_id("docs", nid) for nid in ("a", "b", "c")
     }

@@ -57,7 +57,7 @@ def search_tool(
         results: list[dict[str, Any]] = sink.search(
             query, semantic_ratio=semantic_ratio, filters=combined, limit=limit
         )
-    except Exception as exc:  # noqa: BLE001 - turn a bad filter into self-correcting guidance
+    except Exception as exc:  # turn a bad filter into self-correcting guidance
         if combined and "filter" in str(exc).lower():
             raise ValueError(
                 f"invalid filter {combined!r}. Use Meilisearch syntax — "

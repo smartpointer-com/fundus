@@ -30,14 +30,13 @@ import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
-
 from typing import IO, NoReturn
 
 import httpx
 import structlog
 
 from fundus.config import EngineConfig
-from fundus.extract.base import ExtractRequest, Extractor
+from fundus.extract.base import Extractor, ExtractRequest
 from fundus.models import ExtractionResult
 
 log = structlog.get_logger("fundus.extract.lifecycle")
@@ -156,6 +155,7 @@ class EngineLifecycle:
                 env=self._merged_env(),
                 capture_output=True,
                 timeout=self._timeout,
+                check=False,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             self._fail(f"engine {self.name!r} start command failed: {exc}")
@@ -191,7 +191,11 @@ class EngineLifecycle:
             log.info("stopping engine (delegated)", engine=self.name, argv=self._stop)
             try:
                 proc = subprocess.run(
-                    self._stop, env=self._merged_env(), capture_output=True, timeout=self._timeout
+                    self._stop,
+                    env=self._merged_env(),
+                    capture_output=True,
+                    timeout=self._timeout,
+                    check=False,
                 )
                 if proc.returncode != 0:
                     tail = proc.stderr.decode(errors="replace").strip()[-500:]

@@ -187,7 +187,7 @@ class NotmuchSource:
         for part_id, filename, mime in _attachment_parts(message.get("body") or []):
             try:
                 data = self._part_run(message_id, part_id)
-            except Exception as exc:  # noqa: BLE001 - a bad part must not sink the email
+            except Exception as exc:  # a bad part must not sink the email
                 log.warning("attachment fetch failed", message_id=message_id,
                             part=part_id, filename=filename, error=str(exc))
                 continue
@@ -212,10 +212,10 @@ class NotmuchSource:
         """
         if not self._attachments:
             out = self._run(["search", "--output=messages", self._query])
-            for line in out.splitlines():
-                line = line.strip()
+            for raw in out.splitlines():
+                line = raw.strip()
                 if line:
-                    yield line[3:] if line.startswith("id:") else line
+                    yield line.removeprefix("id:")
             return
         out = self._run(["show", "--format=json", "--format-version=5", "--body=true", self._query])
         for message in _iter_messages(json.loads(out) if out.strip() else []):

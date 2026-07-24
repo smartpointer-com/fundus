@@ -91,8 +91,7 @@ class FilesSource:
         self._max_mtime = since
         for path in self._walk():
             st = path.stat()
-            if st.st_mtime > self._max_mtime:
-                self._max_mtime = st.st_mtime
+            self._max_mtime = max(self._max_mtime, st.st_mtime)
             if st.st_mtime <= since:
                 continue
             item = self._item(path, st)
@@ -103,8 +102,7 @@ class FilesSource:
         """Every live, indexable file's ``(native_id, FileStat)`` — stat only, no byte reads."""
         for path in self._walk():
             st = path.stat()
-            if st.st_mtime > self._max_mtime:
-                self._max_mtime = st.st_mtime
+            self._max_mtime = max(self._max_mtime, st.st_mtime)
             if self._too_big(st.st_size) or st.st_size == 0:
                 continue
             yield str(path), FileStat(st.st_size, st.st_mtime)

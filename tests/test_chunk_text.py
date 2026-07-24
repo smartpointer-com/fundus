@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fundus.chunk.base import ChunkParams
 from fundus.chunk.text import TextChunker
@@ -11,7 +11,7 @@ def _item():
         type="files",
         native_id="f1",
         item_kind="file",
-        ts=datetime(2024, 1, 1),
+        ts=datetime(2024, 1, 1, tzinfo=UTC),
         payload=TextPayload(text="x"),
     )
 

@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict
 
 from fundus.core.ids import content_sha256, options_hash
 from fundus.core.sqlite import connect as sqlite_connect
-from fundus.extract.base import ExtractRequest, Extractor
+from fundus.extract.base import Extractor, ExtractRequest
 from fundus.models import ExtractionResult
 
 

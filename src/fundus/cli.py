@@ -28,6 +28,14 @@ SEARCH = "Search"
 SERVER = "MCP server"
 SYSTEM = "System"
 
+# Module-level Typer option singletons: for a mutable (`[]`) or Path-typed default, the
+# `typer.Option(...)` call must not live in a signature default (evaluated once at import) —
+# bind it to a name here and reference it below.
+PathPrefixOpt = typer.Option(
+    [], "--path-prefix", help="Only documents whose id/path starts with PREFIX (repeatable)."
+)
+BakeoffOutOpt = typer.Option(None, help="Write each engine's Markdown here.")
+
 
 @app.command(rich_help_panel=INDEXING)
 def init(config: Path | None = ConfigOpt) -> None:
@@ -86,9 +94,7 @@ def reparse(
     ocr_only: bool = typer.Option(
         False, "--ocr-only", help="Only documents whose indexed text came from OCR."
     ),
-    path_prefix: list[str] = typer.Option(
-        [], "--path-prefix", help="Only documents whose id/path starts with PREFIX (repeatable)."
-    ),
+    path_prefix: list[str] = PathPrefixOpt,
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Report how many documents would re-parse; change nothing."
     ),
@@ -174,7 +180,7 @@ def embed_backfill(config: Path | None = ConfigOpt) -> None:
 def bakeoff(
     directory: Path,
     engines: str | None = typer.Option(None, help="Comma-separated engines (default: all configured)."),
-    out: Path | None = typer.Option(None, help="Write each engine's Markdown here."),
+    out: Path | None = BakeoffOutOpt,
     config: Path | None = ConfigOpt,
 ) -> None:
     """Run extraction engines over a sample directory and compare output."""
@@ -233,7 +239,7 @@ def list_sources(
     cfg = load_config(config)
     try:
         counts = build_sink(cfg).source_counts()
-    except Exception:  # noqa: BLE001 - counts are best-effort (index may be absent/unreachable)
+    except Exception:  # counts are best-effort (index may be absent/unreachable)
         counts = {}
 
     def detail(s: Any) -> dict[str, Any]:

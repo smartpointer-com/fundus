@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fundus.chunk.chat import (
     ChatChunker,
@@ -11,7 +11,7 @@ from fundus.models import SourceItem, TextPayload
 
 
 def _msgs(n, gap_seconds=60, text="word word word word"):
-    base = datetime(2024, 1, 1, 12, 0, 0)
+    base = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
     return [
         ChatMessage(id=str(i), ts=base + timedelta(seconds=i * gap_seconds), sender=f"u{i % 2}", text=text)
         for i in range(n)
@@ -33,7 +33,7 @@ def test_splits_on_budget_with_overlap():
 
 def test_long_gap_splits_after_target():
     params = ChatWindowParams(target_tokens=5, max_tokens=1000, overlap_messages=0, soft_gap_hours=1)
-    base = datetime(2024, 1, 1, 12, 0, 0)
+    base = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
     msgs = [
         ChatMessage(id="0", ts=base, sender="a", text="hello world"),
         ChatMessage(id="1", ts=base + timedelta(minutes=1), sender="a", text="more text"),
@@ -52,8 +52,8 @@ def test_short_gaps_do_not_split():
 
 def test_transcript_render():
     msgs = [
-        ChatMessage(id="0", ts=datetime(2024, 1, 1), sender="a", text="hi"),
-        ChatMessage(id="1", ts=datetime(2024, 1, 1), sender="", text="system"),
+        ChatMessage(id="0", ts=datetime(2024, 1, 1, tzinfo=UTC), sender="a", text="hi"),
+        ChatMessage(id="1", ts=datetime(2024, 1, 1, tzinfo=UTC), sender="", text="system"),
     ]
     assert transcript(msgs) == "a: hi\nsystem"
 
@@ -65,7 +65,7 @@ def test_chat_chunker_reads_item_extra():
         type="wacli",
         native_id="jid1",
         item_kind="chat_window",
-        ts=datetime(2024, 1, 1),
+        ts=datetime(2024, 1, 1, tzinfo=UTC),
         payload=TextPayload(text=""),
         extra={"messages": msgs},
     )

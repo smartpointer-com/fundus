@@ -156,7 +156,7 @@ class ExtractionResult(BaseModel):
     metadata: DocMeta = Field(default_factory=DocMeta)
 
     @classmethod
-    def from_text(cls, text: str, *, engine: EngineRef | None = None) -> "ExtractionResult":
+    def from_text(cls, text: str, *, engine: EngineRef | None = None) -> ExtractionResult:
         """Wrap already-textual content as a single-stream result."""
         eng = engine or EngineRef(name="passthrough", version="1")
         return cls(engine=eng, blocks=[Block(type="paragraph", text=text)], markdown=text)

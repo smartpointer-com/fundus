@@ -84,7 +84,7 @@ class EngineConfig(BaseModel):
     start_timeout: float = 60.0
 
     @model_validator(mode="after")
-    def _stop_requires_start(self) -> "EngineConfig":
+    def _stop_requires_start(self) -> EngineConfig:
         if self.stop and not self.start:
             raise ValueError("engine `stop` is only meaningful together with `start`")
         return self

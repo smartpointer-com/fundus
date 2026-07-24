@@ -43,6 +43,29 @@ packages = ["src/fundus"]
 line-length = 100
 target-version = "py311"
 
+[tool.ruff.lint]
+# Strict rule set (matches the linting GitHub runs): pyflakes/pycodestyle plus
+# import sorting, pyupgrade, bugbear, simplify, comprehensions, datetimez,
+# bandit, pylint, refurb, and ruff-native rules.
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "DTZ", "S", "PL", "RUF", "FURB"]
+ignore = [
+    "E501",     # line length is the formatter's job (`make fmt`); don't double-report it
+    "S101",     # `assert` is used deliberately (tests, and a few internal invariants)
+    # bandit rules that only make sense for untrusted input — this is a personal CLI
+    # whose subprocess argv and SQL are built from the owner's own config, not the network.
+    "S404",     # importing subprocess is intentional (on-demand engine lifecycle)
+    "S603",     # subprocess argv is trusted (config-provided), never network input
+    "S607",     # engines may be launched by a PATH-relative name by design
+    "S608",     # SQL is built from trusted table/column names in config, not user input
+    "PLC0415",  # imports are deliberately lazy/local (optional deps, faster CLI startup)
+    "PLR0913",  # "too many arguments" — Typer commands legitimately have many options
+    "PLR0917",  # "too many positional arguments" — same story (Typer options, wide __init__s)
+    "PLR2004",  # "magic value" — over-eager on thresholds / HTTP status codes
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S108"]  # fixtures use fake tokens and /tmp paths
+
 [tool.mypy]
 python_version = "3.11"
 strict = true

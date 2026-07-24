@@ -26,7 +26,7 @@ from fundus.core.state import JsonStateStore, StateStore
 from fundus.embed.cache import SqliteEmbeddingCache, embed_input_text
 from fundus.embed.client import EmbeddingClient
 from fundus.embed.config import rest_embedder, user_provided_embedder
-from fundus.extract.base import ExtractOptions, ExtractRequest, Extractor
+from fundus.extract.base import ExtractOptions, Extractor, ExtractRequest
 from fundus.extract.cache import ExtractionCache, SqliteExtractionCache, extract_with_cache
 from fundus.extract.lifecycle import EngineLifecycles, build_lifecycles, install_sigterm_handler
 from fundus.extract.normalize import markdown_to_blocks
@@ -219,7 +219,7 @@ class Pipeline:
                 report.counts[cfg.name] = self.index_source(
                     build_source(cfg), full=full, force=force, allow_mass_delete=allow_mass_delete
                 )
-            except Exception as exc:  # noqa: BLE001 - one bad source must not abort the rest
+            except Exception as exc:  # one bad source must not abort the rest
                 log.error("source failed", source=cfg.name, error=str(exc))
                 report.failures[cfg.name] = str(exc)
         return report
@@ -269,7 +269,7 @@ class Pipeline:
                 ]
                 self._embed(docs)
                 return docs
-            except Exception as exc:  # noqa: BLE001 - one bad item must not abort the whole index
+            except Exception as exc:  # one bad item must not abort the whole index
                 # Retry only transient transport failures (dropped/refused/reset connections when
                 # the engine is briefly saturated). A definitive HTTP response (e.g. 504 on a file
                 # the engine can't convert in time) or any other error is permanent for this item;

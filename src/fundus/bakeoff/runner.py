@@ -12,7 +12,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from fundus.core.mime import guess_mime
-from fundus.extract.base import ExtractOptions, ExtractRequest, Extractor
+from fundus.extract.base import ExtractOptions, Extractor, ExtractRequest
 from fundus.extract.cache import ExtractionCache, extract_with_cache
 from fundus.models import ExtractionResult
 
@@ -59,8 +59,8 @@ def run_bakeoff(
 ) -> list[FileBakeoff]:
     options = options or ExtractOptions()
     results: list[FileBakeoff] = []
-    for path in files:
-        path = Path(path)
+    for raw in files:
+        path = Path(raw)
         data = path.read_bytes()
         mime = guess_mime(data, path.name)
         fb = FileBakeoff(file=str(path))
@@ -68,7 +68,7 @@ def run_bakeoff(
             req = ExtractRequest(data=data, mime_type=mime, filename=path.name, options=options)
             try:
                 result, run = _measure(extractor, req, cache)
-            except Exception as exc:  # noqa: BLE001 - one failed engine must not stop the sweep
+            except Exception as exc:  # one failed engine must not stop the sweep
                 fb.runs.append(EngineRun(engine=extractor.name, ok=False, error=str(exc)))
                 continue
             fb.runs.append(run)

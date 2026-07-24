@@ -29,7 +29,7 @@ def parse_hhmm(value: str) -> dict[str, int]:
     hh, _, mm = value.strip().partition(":")
     hour, minute = int(hh), int(mm or "0")
     if not (0 <= hour < 24 and 0 <= minute < 60):
-        raise ValueError(f"invalid time {value!r}; expected HH:MM in 00:00–23:59")
+        raise ValueError(f"invalid time {value!r}; expected HH:MM in 00:00-23:59")
     return {"Hour": hour, "Minute": minute}
 
 

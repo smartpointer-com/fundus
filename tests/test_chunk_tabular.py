@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fundus.chunk.base import ChunkParams
 from fundus.chunk.tabular import TabularChunker, parse_sheets
@@ -12,7 +12,7 @@ def _item(data=b""):
         native_id="sheet1",
         item_kind="file",
         mime_type="text/csv",
-        ts=datetime(2024, 1, 1),
+        ts=datetime(2024, 1, 1, tzinfo=UTC),
         payload=BlobPayload(data=data),
     )
 

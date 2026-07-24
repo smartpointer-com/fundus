@@ -8,7 +8,8 @@ reconciliation. New source types implement this Protocol and register in
 
 from __future__ import annotations
 
-from typing import Iterator, Protocol, runtime_checkable
+from collections.abc import Iterator
+from typing import Protocol, runtime_checkable
 
 from fundus.models import Cursor, FileStat, SourceItem
 

@@ -13,7 +13,7 @@ def guess_mime(data: bytes, filename: str | None = None) -> str:
         guess = puremagic.from_string(data, mime=True)
         if guess:
             return guess
-    except Exception:  # noqa: BLE001 - detection is best-effort; fall through to filename
+    except Exception:  # noqa: S110 - detection is best-effort; fall through to filename
         pass
     if filename:
         mt, _ = mimetypes.guess_type(filename)

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import structlog
 
-from fundus.extract.base import ExtractRequest, Extractor
+from fundus.extract.base import Extractor, ExtractRequest
 from fundus.models import ExtractionResult
 
 log = structlog.get_logger("fundus.extract.router")
@@ -62,7 +62,7 @@ class EscalatingExtractor:
         fast_result: ExtractionResult | None
         try:
             fast_result = self._fast.extract(fast_req)
-        except Exception as exc:  # noqa: BLE001 - cheap engine choked; let the quality engine try
+        except Exception as exc:  # cheap engine choked; let the quality engine try
             log.info("fast extract failed; escalating", filename=req.filename, error=str(exc))
             fast_result = None
         if fast_result is not None:
@@ -87,7 +87,7 @@ class EscalatingExtractor:
             )
         try:
             quality_result = self._quality.extract(req)
-        except Exception as exc:  # noqa: BLE001 - classify below; may still be salvageable
+        except Exception as exc:  # classify below; may still be salvageable
             if fast_result is None:
                 raise  # both engines down: nothing to salvage from
             log.info(
@@ -122,6 +122,6 @@ class EscalatingExtractor:
         )
         try:
             return self._fast.extract(ocr_req)
-        except Exception as exc:  # noqa: BLE001 - best-effort rung; fall back to what we have
+        except Exception as exc:  # best-effort rung; fall back to what we have
             log.info("fast OCR retry failed", filename=req.filename, error=str(exc))
             return None

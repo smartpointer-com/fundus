@@ -6,7 +6,8 @@ index-settings / upsert / delete semantics from the rest of the pipeline.
 
 from __future__ import annotations
 
-from typing import Protocol, Sequence
+from collections.abc import Sequence
+from typing import Protocol
 
 from pydantic import BaseModel, Field
 

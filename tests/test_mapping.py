@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fundus.core.ids import doc_id
 from fundus.index.mapping import to_index_document
@@ -6,14 +6,14 @@ from fundus.models import Chunk, SourceItem, TextPayload
 
 
 def _item(**kw):
-    base = dict(
-        source="docs",
-        type="files",
-        native_id="f1",
-        item_kind="file",
-        ts=datetime(2024, 1, 1),
-        payload=TextPayload(text="x"),
-    )
+    base = {
+        "source": "docs",
+        "type": "files",
+        "native_id": "f1",
+        "item_kind": "file",
+        "ts": datetime(2024, 1, 1, tzinfo=UTC),
+        "payload": TextPayload(text="x"),
+    }
     base.update(kw)
     return SourceItem(**base)
 
@@ -26,7 +26,7 @@ def test_doc_mapping_folds_heading_path():
     assert doc.parent_id == "par"
     assert doc.title == "T"
     assert doc.body.startswith("H1 > H2")
-    assert doc.ts == int(datetime(2024, 1, 1).timestamp())
+    assert doc.ts == int(datetime(2024, 1, 1, tzinfo=UTC).timestamp())
     assert doc.tags == ["a"]
     assert doc.mime == "application/pdf"
 

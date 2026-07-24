@@ -46,15 +46,19 @@ def test_cli_bare_invocation_prints_help():
 
     result = runner.invoke(app, [])
     client_result = runner.invoke(client_app, [])
-    assert "Usage" in result.output and "Commands" in result.output
+    assert "Usage" in result.output
     assert result.exit_code == client_result.exit_code  # bare fundus == bare fundus-client
 
 
-def test_cli_help_lists_commands():
+def test_cli_help_lists_commands_grouped_by_theme():
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
     for command in ("index", "query", "serve", "sources", "bakeoff", "init", "paths", "connect"):
         assert command in result.output
+    # Commands are grouped into themed panels, in pipeline order.
+    panels = ("Indexing", "Search", "MCP server", "System")
+    positions = [result.output.index(p) for p in panels]
+    assert positions == sorted(positions)
 
 
 def _connect_config(tmp_path, extra=""):

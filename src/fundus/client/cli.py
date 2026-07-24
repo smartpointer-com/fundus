@@ -26,12 +26,6 @@ TokenOpt = typer.Option(None, "--token", help="Bearer token (default: [serve].to
 TransportOpt = typer.Option(None, "--transport", help="streamable-http (default) | sse.")
 
 
-@client_app.command()
-def version() -> None:
-    """Print the fundus-client version."""
-    typer.echo(f"v{__version__}")
-
-
 def _payload(result: Any) -> Any:
     """Extract a tool's return value from a CallToolResult (structured first, else parse text)."""
     structured = getattr(result, "structuredContent", None)
@@ -150,3 +144,9 @@ def locate(
     """Resolve a search hit's `ref` to an openable path via the server's `locate` tool."""
     res = _invoke(load_config(config), url, token, transport, "locate", {"ref": ref})
     typer.echo(json.dumps(res, indent=2, default=str) if json_out else res)
+
+
+@client_app.command()
+def version() -> None:
+    """Print the fundus-client version."""
+    typer.echo(f"v{__version__}")

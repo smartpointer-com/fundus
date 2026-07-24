@@ -313,19 +313,25 @@ def bakeoff(
     config: Path | None = ConfigOpt,
 ) -> None:
     """Run extraction engines over a sample directory and compare output."""
+    from fundus.extract.lifecycle import build_lifecycles
+
     cfg = load_config(config)
     names = engines.split(",") if engines else list(cfg.extractor.engines)
-    extractors = [build_extractor(n, cfg.extractor) for n in names]
+    lifecycles = build_lifecycles(cfg.extractor.engines, log_dir=cfg.logs_dir())
+    extractors = [build_extractor(n, cfg.extractor, lifecycles) for n in names]
     files = [p for p in directory.rglob("*") if p.is_file()]
-    for result in run_bakeoff(files, extractors, out_dir=out):
-        typer.echo(result.file)
-        for r in result.runs:
-            status = "ok" if r.ok else f"FAIL: {r.error}"
-            ocr = "  [ocr]" if r.ocr_used else ""
-            typer.echo(
-                f"  {r.engine:<14} {status:<24} {r.chars:>7} chars  "
-                f"{r.table_count} tables  {r.elapsed_s}s{ocr}"
-            )
+    try:
+        for result in run_bakeoff(files, extractors, out_dir=out):
+            typer.echo(result.file)
+            for r in result.runs:
+                status = "ok" if r.ok else f"FAIL: {r.error}"
+                ocr = "  [ocr]" if r.ocr_used else ""
+                typer.echo(
+                    f"  {r.engine:<14} {status:<24} {r.chars:>7} chars  "
+                    f"{r.table_count} tables  {r.elapsed_s}s{ocr}"
+                )
+    finally:
+        lifecycles.shutdown()
 
 
 if __name__ == "__main__":

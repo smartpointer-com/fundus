@@ -204,6 +204,13 @@ corpus-dependent, so it is deliberately swappable:
 - `bakeoff/` runs the engines over a representative sample and reports
   (characters, tables, speed, failures) so the default engine is chosen
   **empirically** on the target corpus.
+- **On-demand lifecycle** (`lifecycle.py`, opt-in per engine): with a `start`
+  command configured, the engine is raised lazily — on the first document that
+  actually reaches it — and stopped when the run ends, so a heavyweight engine
+  holds memory only while extraction happens. An engine that is already
+  reachable is used as-is and never stopped; a run that brings no new documents
+  starts nothing. The query path is untouched: only extraction engines
+  participate, never Meilisearch or the embedder (which also serves queries).
 
 ## Chunking strategy
 

@@ -7,6 +7,7 @@ from typing import Callable
 from fundus.config import EngineConfig, ExtractorConfig
 from fundus.extract.base import Extractor
 from fundus.extract.docling import DoclingServeExtractor
+from fundus.extract.lifecycle import EngineLifecycles, ManagedExtractor
 from fundus.extract.router import EscalatingExtractor
 from fundus.extract.tika import TikaExtractor
 
@@ -23,12 +24,14 @@ def available_engines() -> list[str]:
     return [*sorted(_BUILDERS), "escalate"]
 
 
-def build_extractor(name: str, config: ExtractorConfig) -> Extractor:
+def build_extractor(
+    name: str, config: ExtractorConfig, lifecycles: EngineLifecycles | None = None
+) -> Extractor:
     if name == "escalate":
         rc = config.router
         return EscalatingExtractor(
-            build_extractor(rc.fast, config),
-            build_extractor(rc.quality, config),
+            build_extractor(rc.fast, config, lifecycles),
+            build_extractor(rc.quality, config, lifecycles),
             min_chars=rc.min_chars,
             max_bytes=rc.max_bytes,
         )
@@ -36,4 +39,6 @@ def build_extractor(name: str, config: ExtractorConfig) -> Extractor:
         raise KeyError(f"unknown extraction engine: {name!r} (have {available_engines()})")
     if name not in config.engines:
         raise KeyError(f"engine {name!r} is not configured under [extractor.engines]")
-    return _BUILDERS[name](config.engines[name])
+    extractor = _BUILDERS[name](config.engines[name])
+    lifecycle = lifecycles.get(name) if lifecycles else None
+    return ManagedExtractor(extractor, lifecycle) if lifecycle else extractor

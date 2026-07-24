@@ -74,6 +74,10 @@ let fundus talk to it over HTTP:
 4. Optionally let `fundus service` keep the server alive alongside the index/serve
    jobs by setting `[service.docling]` (`enabled`, `command`, `environment`); then
    `fundus service install` installs a `<prefix>.docling` keep-alive job too.
+   To hold docling-serve's memory only while indexing, skip the keep-alive job
+   and give the engine the same command line as an on-demand `start`
+   (`[extractor.engines.docling-serve].start`): each run raises it on first use
+   and stops it at the end.
 
 `ocr_engine` is unset by default; containerized/Linux deployments need not set it.
 

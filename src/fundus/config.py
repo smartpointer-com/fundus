@@ -18,7 +18,7 @@ import subprocess
 import tomllib
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class MeiliConfig(BaseModel):
@@ -68,6 +68,26 @@ class EngineConfig(BaseModel):
     # containerized engine can't reach Vision, so it stays on its CPU default (EasyOCR). None means
     # the field is not sent, preserving docling-serve's default; this is the portable default.
     ocr_engine: str | None = None
+    # --- On-demand lifecycle (optional). With `start` set, the engine is raised lazily — on the
+    # first extraction request that needs it — and stopped when the run ends, so it consumes
+    # memory only while extraction happens. An engine already reachable when first needed is used
+    # as-is and never stopped (it wasn't started here). Unset = the engine is expected to be
+    # running, exactly as before.
+    # `start` alone spawns a managed child process (its output goes to engine-<name>.log under the
+    # logs dir); `start` plus `stop` delegates both to commands run to completion (e.g.
+    # `docker compose start/stop <service>`).
+    start: list[str] = Field(default_factory=list)
+    stop: list[str] = Field(default_factory=list)
+    # Extra environment merged over the parent's for `start`/`stop` (e.g. a venv on PATH).
+    start_env: dict[str, str] = Field(default_factory=dict)
+    # Seconds to wait for the engine to answer HTTP after starting (and per delegated command).
+    start_timeout: float = 60.0
+
+    @model_validator(mode="after")
+    def _stop_requires_start(self) -> "EngineConfig":
+        if self.stop and not self.start:
+            raise ValueError("engine `stop` is only meaningful together with `start`")
+        return self
 
 
 class RouterConfig(BaseModel):
@@ -102,6 +122,8 @@ class DoclingServiceConfig(BaseModel):
     # on the host and [extractor.engines.docling-serve].url points at it. It is managed alongside the
     # other `fundus service` jobs (one install/uninstall covers everything) and stays off unless
     # enabled. The launch command and its environment live in config, out of this generic repo.
+    # Alternative: an on-demand `start` on the engine itself (EngineConfig) runs docling-serve only
+    # while indexing extracts, freeing its memory in between — then this job is unnecessary.
     enabled: bool = False
     # e.g. ["/path/to/venv/bin/docling-serve", "run", "--host", "127.0.0.1", "--port", "5001"]
     command: list[str] = Field(default_factory=list)

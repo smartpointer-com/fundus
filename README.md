@@ -89,6 +89,17 @@ On Apple Silicon, `--docling` (or `[service.docling]`) adds a fourth job that ke
 containerized engine can't reach. See
 [docs/deployment.md](docs/deployment.md#apple-silicon-ocr-via-apple-vision).
 
+## On-demand extraction engines
+
+Extraction engines are only needed while indexing. Give an engine a `start`
+command (`[extractor.engines.*]` in the example config) and fundus raises it
+lazily — on the first document that actually needs it — and stops it when the
+run ends, so a heavyweight engine (a bare-metal docling-serve, a tika
+container) holds memory only during extraction. An engine that is already
+running is used as-is and never stopped, and a run that brings no new documents
+starts nothing. Search stays warm throughout: Meilisearch and the embedder
+(which also serves queries) are never part of this.
+
 ## Read-only access for agents (MCP)
 
 `fundus serve` runs a read-only MCP server exposing `search`, `sources`, and

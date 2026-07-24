@@ -15,6 +15,9 @@
 # command = ["/path/to/venv/bin/docling-serve", "run", "--host", "127.0.0.1", "--port", "5001"]
 #                          # Vision (ocrmac) or the GPU, so you run docling-serve on the host and
 #                          # point [extractor.engines.docling-serve].url at it. Command/env are yours.
+#                          # To run docling-serve only WHILE indexing (saving its memory in between),
+#                          # use an on-demand `start` under [extractor.engines.docling-serve] below
+#                          # instead of this job.
 # [service.docling.environment]
 # PATH = "/path/to/venv/bin:/opt/homebrew/bin:/usr/bin:/bin"   # e.g. put the venv on PATH
 
@@ -73,9 +76,25 @@ url = "http://127.0.0.1:5001"
 #                          # the next `fundus index --full` re-parses exactly those, no cache surgery needed.
 #                          # (Engine UPGRADES never auto-re-parse; use `fundus reparse --ocr-only` when one
 #                          # seems worth it.)
+#
+# On-demand lifecycle (optional, any engine): with `start` set, the engine is raised lazily — on
+# the first document that needs it — and stopped when the run ends, so it holds memory only while
+# extraction happens. An engine already reachable when first needed is used as-is and never
+# stopped; a run that brings no new documents starts nothing. Search is unaffected. `start` alone
+# spawns a managed child process (output to logs/engine-<name>.log under the data root); `start`
+# plus `stop` delegates both to commands run to completion (see the tika example below). With an
+# on-demand `start` here, the [service.docling] keep-alive job above becomes unnecessary.
+# start = ["/path/to/venv/bin/docling-serve", "run", "--host", "127.0.0.1", "--port", "5001"]
+# start_timeout = 120      # seconds to wait for it to answer HTTP after starting
+# [extractor.engines.docling-serve.start_env]   # extra env for the start command
+# PATH = "/path/to/venv/bin:/opt/homebrew/bin:/usr/bin:/bin"
 
 [extractor.engines.tika]
 url = "http://127.0.0.1:9998"
+# On-demand via Docker instead of always-on (see the lifecycle comment above): keep the container
+# stopped between runs and let indexing raise it.
+# start = ["docker", "compose", "-f", "/path/to/fundus/docker/compose.yml", "start", "tika"]
+# stop  = ["docker", "compose", "-f", "/path/to/fundus/docker/compose.yml", "stop", "tika"]
 
 # Escalating router: run `fast` first and fall back to `quality` only when the result is too sparse
 # (a scanned PDF needing OCR) — ~tika speed with docling fidelity where it matters. Set the extractor

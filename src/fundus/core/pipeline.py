@@ -28,6 +28,7 @@ from fundus.embed.client import EmbeddingClient
 from fundus.embed.config import rest_embedder, user_provided_embedder
 from fundus.extract.base import ExtractOptions, ExtractRequest, Extractor
 from fundus.extract.cache import ExtractionCache, SqliteExtractionCache, extract_with_cache
+from fundus.extract.lifecycle import EngineLifecycles, build_lifecycles, install_sigterm_handler
 from fundus.extract.normalize import markdown_to_blocks
 from fundus.extract.registry import build_extractor
 from fundus.index.base import IndexSettings, Sink
@@ -133,6 +134,7 @@ class Pipeline:
         retry_backoff: float = 1.0,
         doc_embedder: EmbeddingClient | None = None,
         embed_cache: SqliteEmbeddingCache | None = None,
+        lifecycles: EngineLifecycles | None = None,
     ) -> None:
         self._config = config
         self._sink = sink
@@ -146,6 +148,8 @@ class Pipeline:
         self._retry_backoff = retry_backoff
         self._doc_embedder = doc_embedder
         self._embed_cache = embed_cache
+        # Lifecycles of on-demand engines (config `start`); runs stop what they started.
+        self._lifecycles = lifecycles
         # name -> current fingerprint for every engine that can author a result here;
         # the "expected" side of the extract_sig staleness check.
         self._engine_fps = engine_fingerprints(extractor)
@@ -187,6 +191,22 @@ class Pipeline:
         full: bool = False,
         force: bool = False,
         allow_mass_delete: bool = False,
+    ) -> IndexReport:
+        try:
+            return self._index(
+                only=only, full=full, force=force, allow_mass_delete=allow_mass_delete
+            )
+        finally:
+            if self._lifecycles:
+                self._lifecycles.shutdown()
+
+    def _index(
+        self,
+        *,
+        only: str | None,
+        full: bool,
+        force: bool,
+        allow_mass_delete: bool,
     ) -> IndexReport:
         report = IndexReport()
         for cfg in self._config.sources:
@@ -360,6 +380,13 @@ class Pipeline:
         document's old chunks only AFTER its fresh extraction succeeded, so an engine
         outage mid-run cannot wipe serviceable documents from the index.
         """
+        try:
+            return self._reparse(source, native_ids)
+        finally:
+            if self._lifecycles:
+                self._lifecycles.shutdown()
+
+    def _reparse(self, source: TreeSource, native_ids: Iterable[str]) -> dict[str, int]:
         nids = sorted(set(native_ids))
         counts = {"selected": len(nids), "reparsed": 0, "missing": 0, "failed": 0, "chunks": 0}
 
@@ -458,14 +485,19 @@ def build_pipeline(
             timeout=180.0,
         )
         embed_cache = SqliteEmbeddingCache(str(config.embed_cache_path()), config.embedder.model)
+    lifecycles = build_lifecycles(config.extractor.engines, log_dir=config.logs_dir())
+    if lifecycles:
+        # A launchd/operator SIGTERM mid-run must still stop the engines this run started.
+        install_sigterm_handler()
     return Pipeline(
         config,
         sink or build_sink(config),
-        build_extractor(config.extractor.default, config.extractor),
+        build_extractor(config.extractor.default, config.extractor, lifecycles),
         SqliteExtractionCache(cache_path or str(config.extraction_cache_path())),
         JsonStateStore(state_path or str(config.cursors_path())),
         ocr_languages=list(config.locales),
         workers=config.workers,
         doc_embedder=doc_embedder,
         embed_cache=embed_cache,
+        lifecycles=lifecycles,
     )

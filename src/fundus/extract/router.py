@@ -56,9 +56,7 @@ class EscalatingExtractor:
     def extract(self, req: ExtractRequest) -> ExtractionResult:
         # First pass forces OCR off: a scanned PDF then yields ~no text and escalates to the quality
         # engine (which OCRs), instead of the cheap engine doing slow, lower-quality OCR itself.
-        fast_req = req.model_copy(
-            update={"options": req.options.model_copy(update={"ocr": "off"})}
-        )
+        fast_req = req.model_copy(update={"options": req.options.model_copy(update={"ocr": "off"})})
         fast_result: ExtractionResult | None
         try:
             fast_result = self._fast.extract(fast_req)

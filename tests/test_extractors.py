@@ -12,9 +12,7 @@ def _client(handler):
 
 
 def _req(**opts):
-    return ExtractRequest(
-        data=b"x", mime_type="application/pdf", options=ExtractOptions(**opts)
-    )
+    return ExtractRequest(data=b"x", mime_type="application/pdf", options=ExtractOptions(**opts))
 
 
 def test_tika_maps_rmeta_to_blocks():

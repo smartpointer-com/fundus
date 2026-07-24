@@ -49,12 +49,25 @@ def test_parse_hhmm():
 
 def test_fundus_command_is_a_direct_exec():
     # No shell wrapper, no secret sourcing — fundus self-sources its env_file at startup.
-    assert fundus_command("/opt/pipx/fundus", "/cfg.toml", "index") == \
-        ["/opt/pipx/fundus", "index", "--config", "/cfg.toml"]
-    assert fundus_command("/b/fundus", "/cfg.toml", "index", "--full") == \
-        ["/b/fundus", "index", "--full", "--config", "/cfg.toml"]
-    assert fundus_command("/b/fundus", "/cfg.toml", "serve") == \
-        ["/b/fundus", "serve", "--config", "/cfg.toml"]
+    assert fundus_command("/opt/pipx/fundus", "/cfg.toml", "index") == [
+        "/opt/pipx/fundus",
+        "index",
+        "--config",
+        "/cfg.toml",
+    ]
+    assert fundus_command("/b/fundus", "/cfg.toml", "index", "--full") == [
+        "/b/fundus",
+        "index",
+        "--full",
+        "--config",
+        "/cfg.toml",
+    ]
+    assert fundus_command("/b/fundus", "/cfg.toml", "serve") == [
+        "/b/fundus",
+        "serve",
+        "--config",
+        "/cfg.toml",
+    ]
 
 
 # --- plist generation -----------------------------------------------------------------------
@@ -81,7 +94,12 @@ def test_serve_job_kept_alive_and_responsive():
     assert p["KeepAlive"] is True and p["RunAtLoad"] is True  # a server: stay up, start at load
     assert "ProcessType" not in p and "LowPriorityIO" not in p  # responsive, not throttled
     assert "StartInterval" not in p and "StartCalendarInterval" not in p  # no schedule
-    assert srv.program_arguments == ["/opt/pipx/fundus", "serve", "--config", "/home/u/.config/fundus.toml"]
+    assert srv.program_arguments == [
+        "/opt/pipx/fundus",
+        "serve",
+        "--config",
+        "/home/u/.config/fundus.toml",
+    ]
 
 
 def test_include_toggles_select_jobs():
@@ -135,13 +153,20 @@ def test_domain_targets():
 
 def test_plist_paths():
     home = Path("/home/u")
-    assert manager.plist_path("daemon", "x.index", home) == Path("/Library/LaunchDaemons/x.index.plist")
-    assert manager.plist_path("agent", "x.index", home) == home / "Library/LaunchAgents/x.index.plist"
+    assert manager.plist_path("daemon", "x.index", home) == Path(
+        "/Library/LaunchDaemons/x.index.plist"
+    )
+    assert (
+        manager.plist_path("agent", "x.index", home) == home / "Library/LaunchAgents/x.index.plist"
+    )
 
 
 def test_all_labels_covers_index_serve_and_docling():
     assert manager.all_labels("com.x") == [
-        "com.x.index", "com.x.index-full", "com.x.serve", "com.x.docling",
+        "com.x.index",
+        "com.x.index-full",
+        "com.x.serve",
+        "com.x.docling",
     ]
 
 
@@ -176,7 +201,9 @@ def test_wait_until_gone_polls_until_service_absent(monkeypatch):
     # bootout returns before a busy daemon exits; _wait_until_gone must poll `launchctl print`
     # until the label reports gone (rc != 0) before install re-bootstraps it — else the two race.
     seq = [0, 0, 3]  # registered, registered, then gone
-    monkeypatch.setattr(manager, "_run", lambda *a, **k: types.SimpleNamespace(returncode=seq.pop(0)))
+    monkeypatch.setattr(
+        manager, "_run", lambda *a, **k: types.SimpleNamespace(returncode=seq.pop(0))
+    )
     monkeypatch.setattr(manager.time, "sleep", lambda _s: None)
     manager._wait_until_gone("system/fundus.serve", sudo=True, timeout=5)
     assert seq == []  # polled through both "still registered" results, stopped on "gone"
@@ -222,7 +249,9 @@ def test_service_install_refuses_dev_build(monkeypatch, tmp_path):
 def test_service_install_rejects_no_index_no_serve(tmp_path):
     cfg = tmp_path / "fundus.toml"
     cfg.write_text("")
-    result = runner.invoke(app, ["service", "install", "--no-index", "--no-serve", "--config", str(cfg)])
+    result = runner.invoke(
+        app, ["service", "install", "--no-index", "--no-serve", "--config", str(cfg)]
+    )
     assert result.exit_code == 1
     assert "nothing to install" in result.output
 
@@ -263,7 +292,9 @@ def test_service_install_explicit_docling_requires_command(monkeypatch, tmp_path
 def test_service_install_rejects_unexecutable_docling_command(monkeypatch, tmp_path):
     monkeypatch.setattr(manager, "ensure_installed_binary", lambda: Path("/opt/pipx/fundus"))
     cfg = tmp_path / "fundus.toml"
-    cfg.write_text('[service.docling]\nenabled = true\ncommand = ["/no/such/docling-serve", "run"]\n')
+    cfg.write_text(
+        '[service.docling]\nenabled = true\ncommand = ["/no/such/docling-serve", "run"]\n'
+    )
     result = runner.invoke(app, ["service", "install", "--config", str(cfg)])
     assert result.exit_code == 1
     assert "not executable" in result.output

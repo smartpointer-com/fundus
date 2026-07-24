@@ -121,7 +121,9 @@ def reparse(
         src = build_source(scfg)
         if not isinstance(src, TreeSource):
             if source:  # explicitly requested a source reparse cannot serve
-                typer.echo(f"{scfg.name}: not a file-tree source (reparse re-reads files)", err=True)
+                typer.echo(
+                    f"{scfg.name}: not a file-tree source (reparse re-reads files)", err=True
+                )
                 raise typer.Exit(code=2)
             continue
         manifest = sink.indexed_manifest(scfg.name)
@@ -179,7 +181,9 @@ def embed_backfill(config: Path | None = ConfigOpt) -> None:
 @app.command(rich_help_panel=INDEXING)
 def bakeoff(
     directory: Path,
-    engines: str | None = typer.Option(None, help="Comma-separated engines (default: all configured)."),
+    engines: str | None = typer.Option(
+        None, help="Comma-separated engines (default: all configured)."
+    ),
     out: Path | None = BakeoffOutOpt,
     config: Path | None = ConfigOpt,
 ) -> None:
@@ -216,7 +220,8 @@ def query(
     filters: str | None = typer.Option(None, help="Meilisearch filter expression."),
     json_out: bool = typer.Option(False, "--json", "-j", help="Emit JSON instead of text."),
     fields: str | None = typer.Option(
-        None, "--fields",
+        None,
+        "--fields",
         help="Comma-separated fields to show/emit, e.g. score,source,ref,ts,title,snippet,path.",
     ),
     config: Path | None = ConfigOpt,
@@ -225,7 +230,9 @@ def query(
     JID), its timestamp, source/kind, relevance score, and a matched snippet. Use --json for
     machine output and --fields to pick columns."""
     cfg = load_config(config)
-    groups = build_sink(cfg).search(text, semantic_ratio=semantic_ratio, filters=filters, limit=limit)
+    groups = build_sink(cfg).search(
+        text, semantic_ratio=semantic_ratio, filters=filters, limit=limit
+    )
     keys = [f.strip() for f in fields.split(",")] if fields else None
     render_groups(groups, json_out=json_out, fields=keys)
 
@@ -311,7 +318,13 @@ def connect(
         "openclaw": f'openclaw mcp add fundus --url {endpoint} --header "{auth}"',
         "claude": f'claude mcp add --transport {kind} fundus {endpoint} --header "{auth}"',
         "json": json.dumps(
-            {"fundus": {"type": kind, "url": endpoint, "headers": {"Authorization": f"Bearer {token}"}}},
+            {
+                "fundus": {
+                    "type": kind,
+                    "url": endpoint,
+                    "headers": {"Authorization": f"Bearer {token}"},
+                }
+            },
             indent=2,
         ),
     }
@@ -335,7 +348,9 @@ app.add_typer(service_app, name="service", rich_help_panel=SYSTEM)
 @app.command(name="paths", rich_help_panel=SYSTEM)
 def paths(
     meili_data: bool = typer.Option(
-        False, "--meili-data", help="Print only the Meilisearch data directory (for the Docker stack)."
+        False,
+        "--meili-data",
+        help="Print only the Meilisearch data directory (for the Docker stack).",
     ),
     config: Path | None = ConfigOpt,
 ) -> None:

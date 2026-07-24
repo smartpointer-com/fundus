@@ -53,6 +53,7 @@ fmt:
 	$(RUFF) format src tests
 
 lint:
+	$(RUFF) format --check src tests
 	$(RUFF) check src tests
 	$(MYPY) src
 

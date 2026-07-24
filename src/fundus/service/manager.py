@@ -59,7 +59,10 @@ def is_editable_install() -> bool:
 
 
 def _pipx_hint() -> str | None:
-    for cand in (Path.home() / ".local/bin/fundus", Path.home() / ".local/pipx/venvs/fundus/bin/fundus"):
+    for cand in (
+        Path.home() / ".local/bin/fundus",
+        Path.home() / ".local/pipx/venvs/fundus/bin/fundus",
+    ):
         if cand.exists():
             return str(cand)
     return None
@@ -139,7 +142,9 @@ def detect_kind(label_prefix: str, home: Path) -> Kind | None:
     return None
 
 
-def _run(cmd: list[str], *, sudo: bool, check: bool = True, capture: bool = False) -> subprocess.CompletedProcess[str]:
+def _run(
+    cmd: list[str], *, sudo: bool, check: bool = True, capture: bool = False
+) -> subprocess.CompletedProcess[str]:
     argv = (["sudo", *cmd]) if sudo else cmd
     return subprocess.run(argv, check=check, text=True, capture_output=capture)
 
@@ -152,7 +157,10 @@ def _wait_until_gone(target: str, *, sudo: bool, timeout: float = 10.0) -> None:
     anyway; the bootstrap itself still surfaces a real error)."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if _run(["launchctl", "print", target], sudo=sudo, check=False, capture=True).returncode != 0:
+        if (
+            _run(["launchctl", "print", target], sudo=sudo, check=False, capture=True).returncode
+            != 0
+        ):
             return  # no longer registered
         time.sleep(0.25)
 
@@ -169,7 +177,10 @@ def _write_plist(job: Job, kind: Kind, home: Path) -> Path:
             tmp_path = tmp.name
         try:
             # Daemon plists must be root:wheel 644 or launchd refuses to load them.
-            _run(["install", "-m", "644", "-o", "root", "-g", "wheel", tmp_path, str(dest)], sudo=True)
+            _run(
+                ["install", "-m", "644", "-o", "root", "-g", "wheel", tmp_path, str(dest)],
+                sudo=True,
+            )
         finally:
             os.unlink(tmp_path)
     else:
@@ -203,8 +214,12 @@ def uninstall(label_prefix: str, kind: Kind, home: Path) -> list[str]:
     sudo = kind == "daemon"
     removed: list[str] = []
     for label in all_labels(label_prefix):
-        _run(["launchctl", "bootout", f"{domain_target(kind, uid)}/{label}"],
-             sudo=sudo, check=False, capture=True)
+        _run(
+            ["launchctl", "bootout", f"{domain_target(kind, uid)}/{label}"],
+            sudo=sudo,
+            check=False,
+            capture=True,
+        )
         dest = plist_path(kind, label, home)
         if dest.exists():
             if kind == "daemon":
@@ -219,7 +234,10 @@ def kickstart(label: str, kind: Kind, *, restart: bool) -> None:
     """Trigger a job now (``-k`` to kill-and-restart an in-flight one)."""
     uid = os.getuid()
     flag = ["-k"] if restart else []
-    _run(["launchctl", "kickstart", *flag, f"{domain_target(kind, uid)}/{label}"], sudo=kind == "daemon")
+    _run(
+        ["launchctl", "kickstart", *flag, f"{domain_target(kind, uid)}/{label}"],
+        sudo=kind == "daemon",
+    )
 
 
 def status_text(label: str, kind: Kind) -> str:

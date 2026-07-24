@@ -30,7 +30,11 @@ def test_embed_query_applies_prefix_and_auth():
         return httpx.Response(200, json={"data": [{"embedding": [1.0]}]})
 
     client = EmbeddingClient(
-        "http://e", "m", api_key="sekret", query_prompt="Instruct: x\nQuery: ", client=_client(handler)
+        "http://e",
+        "m",
+        api_key="sekret",
+        query_prompt="Instruct: x\nQuery: ",
+        client=_client(handler),
     )
     assert client.embed_query("tax docs") == [1.0]
     assert captured["body"]["input"] == ["Instruct: x\nQuery: tax docs"]

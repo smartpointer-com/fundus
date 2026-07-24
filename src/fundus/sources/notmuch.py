@@ -30,22 +30,24 @@ PartRunner = Callable[[str, int], bytes]
 
 # Attachment MIME types worth extracting (documents). Images and inline body parts are skipped:
 # they are mostly signatures/logos/photos (noise plus OCR cost).
-_ATTACHMENT_TYPES = frozenset({
-    "application/pdf",
-    "application/rtf",
-    "text/rtf",
-    "application/msword",
-    "application/vnd.ms-excel",
-    "application/vnd.ms-powerpoint",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    "application/vnd.oasis.opendocument.text",
-    "application/vnd.oasis.opendocument.spreadsheet",
-    "application/vnd.oasis.opendocument.presentation",
-    "text/csv",
-    "text/tab-separated-values",
-})
+_ATTACHMENT_TYPES = frozenset(
+    {
+        "application/pdf",
+        "application/rtf",
+        "text/rtf",
+        "application/msword",
+        "application/vnd.ms-excel",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/vnd.oasis.opendocument.text",
+        "application/vnd.oasis.opendocument.spreadsheet",
+        "application/vnd.oasis.opendocument.presentation",
+        "text/csv",
+        "text/tab-separated-values",
+    }
+)
 
 
 def _attachment_parts(parts: list[dict[str, Any]]) -> Iterator[tuple[int, str, str]]:
@@ -175,8 +177,12 @@ class NotmuchSource:
                 yield from self._attachment_items(message_id, message, ts, actors, tags)
 
     def _attachment_items(
-        self, message_id: str, message: dict[str, Any], ts: datetime,
-        actors: list[str], tags: list[str],
+        self,
+        message_id: str,
+        message: dict[str, Any],
+        ts: datetime,
+        actors: list[str],
+        tags: list[str],
     ) -> Iterator[SourceItem]:
         """Emit one item per document attachment, fetching its raw bytes on demand.
 
@@ -188,8 +194,13 @@ class NotmuchSource:
             try:
                 data = self._part_run(message_id, part_id)
             except Exception as exc:  # a bad part must not sink the email
-                log.warning("attachment fetch failed", message_id=message_id,
-                            part=part_id, filename=filename, error=str(exc))
+                log.warning(
+                    "attachment fetch failed",
+                    message_id=message_id,
+                    part=part_id,
+                    filename=filename,
+                    error=str(exc),
+                )
                 continue
             yield SourceItem(
                 source=self.name,

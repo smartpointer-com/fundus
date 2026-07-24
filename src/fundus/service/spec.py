@@ -143,41 +143,54 @@ class Plan:
         if self.include_docling:
             # A bare-metal docling-serve, kept alive like the MCP server. Execs the user's own
             # command (not the fundus binary); merges the machine-specific env over HOME/PATH.
-            docling_common = {**common, "environment": {**common["environment"], **self.docling_environment}}
-            out.append(Job(
-                label=self.docling_label,
-                program_arguments=list(self.docling_command),
-                log_path=f"{self.logs_dir}/docling.log",
-                run_at_load=True,
-                keep_alive=True,  # a server: keep it up
-                background=False,  # responsive, not throttled like the batch index jobs
-                **docling_common,
-            ))
+            docling_common = {
+                **common,
+                "environment": {**common["environment"], **self.docling_environment},
+            }
+            out.append(
+                Job(
+                    label=self.docling_label,
+                    program_arguments=list(self.docling_command),
+                    log_path=f"{self.logs_dir}/docling.log",
+                    run_at_load=True,
+                    keep_alive=True,  # a server: keep it up
+                    background=False,  # responsive, not throttled like the batch index jobs
+                    **docling_common,
+                )
+            )
         if self.include_index:
-            out.append(Job(
-                label=self.incremental_label,
-                program_arguments=fundus_command(self.fundus_bin, self.config_path, "index"),
-                log_path=f"{self.logs_dir}/index.log",
-                start_interval=self.interval_minutes * 60,
-                run_at_load=True,  # catch up after sleep/boot
-                **common,
-            ))
-            out.append(Job(
-                label=self.full_label,
-                program_arguments=fundus_command(self.fundus_bin, self.config_path, "index", "--full"),
-                log_path=f"{self.logs_dir}/index-full.log",
-                calendar=parse_hhmm(self.full_at),
-                run_at_load=False,  # never kick a heavy reconcile at load
-                **common,
-            ))
+            out.append(
+                Job(
+                    label=self.incremental_label,
+                    program_arguments=fundus_command(self.fundus_bin, self.config_path, "index"),
+                    log_path=f"{self.logs_dir}/index.log",
+                    start_interval=self.interval_minutes * 60,
+                    run_at_load=True,  # catch up after sleep/boot
+                    **common,
+                )
+            )
+            out.append(
+                Job(
+                    label=self.full_label,
+                    program_arguments=fundus_command(
+                        self.fundus_bin, self.config_path, "index", "--full"
+                    ),
+                    log_path=f"{self.logs_dir}/index-full.log",
+                    calendar=parse_hhmm(self.full_at),
+                    run_at_load=False,  # never kick a heavy reconcile at load
+                    **common,
+                )
+            )
         if self.include_serve:
-            out.append(Job(
-                label=self.serve_label,
-                program_arguments=fundus_command(self.fundus_bin, self.config_path, "serve"),
-                log_path=f"{self.logs_dir}/serve.log",
-                run_at_load=True,
-                keep_alive=True,  # a server: keep it up
-                background=False,  # responsive, not throttled like the batch index jobs
-                **common,
-            ))
+            out.append(
+                Job(
+                    label=self.serve_label,
+                    program_arguments=fundus_command(self.fundus_bin, self.config_path, "serve"),
+                    log_path=f"{self.logs_dir}/serve.log",
+                    run_at_load=True,
+                    keep_alive=True,  # a server: keep it up
+                    background=False,  # responsive, not throttled like the batch index jobs
+                    **common,
+                )
+            )
         return out

@@ -34,7 +34,10 @@ def test_doc_mapping_folds_heading_path():
 def test_chat_mapping_uses_meta():
     item = _item(source="chat", type="wacli", native_id="jid", item_kind="chat_window")
     chunk = Chunk(
-        parent_id="p", seq=0, text="a: hi", meta={"msg_ids": ["1", "2"], "ts": 1700000000, "actors": ["a"]}
+        parent_id="p",
+        seq=0,
+        text="a: hi",
+        meta={"msg_ids": ["1", "2"], "ts": 1700000000, "actors": ["a"]},
     )
     doc = to_index_document(item, chunk)
     assert doc.msg_ids == ["1", "2"]

@@ -51,7 +51,8 @@ def group_by_parent(hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "mime": hit.get("mime"),
                 "msg_ids": hit.get("msg_ids"),
                 "score": hit.get("_rankingScore"),
-                "snippet": (hit.get("_formatted") or {}).get("body") or (hit.get("body") or "")[:240],
+                "snippet": (hit.get("_formatted") or {}).get("body")
+                or (hit.get("body") or "")[:240],
                 "chunks": [],
             }
             order.append(pid)

@@ -13,7 +13,9 @@ def test_build_files():
 
 
 def test_build_notmuch():
-    assert isinstance(build_source(SourceConfig(name="m", type="notmuch", query="tag:inbox")), NotmuchSource)
+    assert isinstance(
+        build_source(SourceConfig(name="m", type="notmuch", query="tag:inbox")), NotmuchSource
+    )
 
 
 def test_build_wacli_with_schema_override():

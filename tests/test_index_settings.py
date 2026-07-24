@@ -21,7 +21,9 @@ def test_build_index_settings():
     assert payload["searchableAttributes"] == ["title", "body"]
     assert "ts" in payload["filterableAttributes"]
     assert payload["sortableAttributes"] == ["ts"]
-    assert payload["localizedAttributes"] == [{"locales": ["eng", "deu"], "attributePatterns": ["*"]}]
+    assert payload["localizedAttributes"] == [
+        {"locales": ["eng", "deu"], "attributePatterns": ["*"]}
+    ]
     assert "embedders" not in payload
 
 

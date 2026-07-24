@@ -41,8 +41,10 @@ def print_result(n: int, g: dict[str, Any]) -> None:
     score = g.get("score")
     score_s = f"{score:.3f}" if isinstance(score, (int, float)) else "  -  "
     ref = g.get("ref") or g.get("parent_id") or ""
-    typer.echo(f"{n:2}. {score_s}  [{g.get('source') or '?'}/{g.get('item_kind') or ''}]  "
-               f"{g.get('title') or '(untitled)'}")
+    typer.echo(
+        f"{n:2}. {score_s}  [{g.get('source') or '?'}/{g.get('item_kind') or ''}]  "
+        f"{g.get('title') or '(untitled)'}"
+    )
     typer.echo(f"      {fmt_ts(g.get('ts'))}   ref: {ref}   ({len(g.get('chunks', []))} hit(s))")
     snippet = " ".join((g.get("snippet") or "").split())
     if snippet:

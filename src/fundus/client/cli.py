@@ -43,7 +43,9 @@ def _payload(result: Any) -> Any:
     return items[0] if len(items) == 1 else items
 
 
-async def _call(endpoint: str, token: str | None, transport: str, tool: str, args: dict[str, Any]) -> Any:
+async def _call(
+    endpoint: str, token: str | None, transport: str, tool: str, args: dict[str, Any]
+) -> Any:
     from mcp import ClientSession
 
     headers = {"Authorization": f"Bearer {token}"} if token else None
@@ -61,7 +63,9 @@ async def _call(endpoint: str, token: str | None, transport: str, tool: str, arg
         return _payload(await session.call_tool(tool, payload))
 
 
-def _resolve(cfg: FundusConfig, url: str | None, token: str | None, transport: str | None) -> tuple[str, str | None, str]:
+def _resolve(
+    cfg: FundusConfig, url: str | None, token: str | None, transport: str | None
+) -> tuple[str, str | None, str]:
     tr = transport or cfg.serve.transport
     if tr == "stdio":
         raise typer.BadParameter("the client needs an HTTP transport (streamable-http or sse)")
@@ -81,17 +85,28 @@ def _failure_message(endpoint: str, has_token: bool, reason: object) -> str:
     if "401" in text or "unauthorized" in text:
         if not has_token:
             return f"unauthorized ({endpoint}): no bearer token sent — set FUNDUS_SERVE_TOKEN or pass --token"
-        return (f"unauthorized ({endpoint}): the server rejected the token — make sure it matches the "
-                f"server's FUNDUS_SERVE_TOKEN")
+        return (
+            f"unauthorized ({endpoint}): the server rejected the token — make sure it matches the "
+            f"server's FUNDUS_SERVE_TOKEN"
+        )
     return f"request to {endpoint} failed: {reason}"
 
 
-def _invoke(cfg: FundusConfig, url: str | None, token: str | None, transport: str | None, tool: str, args: dict[str, Any]) -> Any:
+def _invoke(
+    cfg: FundusConfig,
+    url: str | None,
+    token: str | None,
+    transport: str | None,
+    tool: str,
+    args: dict[str, Any],
+) -> Any:
     endpoint, tok, tr = _resolve(cfg, url, token, transport)
     try:
         return asyncio.run(_call(endpoint, tok, tr, tool, args))
     except Exception as exc:  # surface any transport/auth failure as a clean message
-        typer.echo(f"fundus-client: {_failure_message(endpoint, bool(tok), _unwrap(exc))}", err=True)
+        typer.echo(
+            f"fundus-client: {_failure_message(endpoint, bool(tok), _unwrap(exc))}", err=True
+        )
         raise typer.Exit(code=1) from None
 
 
@@ -108,8 +123,14 @@ def query(
     config: Path | None = ConfigOpt,
 ) -> None:
     """Search the corpus via the server's `search` tool."""
-    groups = _invoke(load_config(config), url, token, transport, "search",
-                     {"query": text, "limit": limit, "semantic_ratio": semantic_ratio, "filters": filters})
+    groups = _invoke(
+        load_config(config),
+        url,
+        token,
+        transport,
+        "search",
+        {"query": text, "limit": limit, "semantic_ratio": semantic_ratio, "filters": filters},
+    )
     render_groups(groups, json_out=json_out)
 
 

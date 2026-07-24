@@ -28,9 +28,7 @@ def _same(a: FileStat | None, b: FileStat) -> bool:
     return a is not None and a.size == b.size and abs(a.mtime - b.mtime) <= _MTIME_EPS
 
 
-def diff_tree(
-    disk: dict[str, FileStat], indexed: dict[str, FileStat]
-) -> tuple[set[str], set[str]]:
+def diff_tree(disk: dict[str, FileStat], indexed: dict[str, FileStat]) -> tuple[set[str], set[str]]:
     """Diff a live file tree against the indexed manifest (both ``native_id -> FileStat``).
 
     Returns ``(changed, removed)``: ``changed`` are native_ids new or whose size/mtime

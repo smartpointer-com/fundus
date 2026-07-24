@@ -14,7 +14,10 @@ class FakeSink:
 
     def search(self, query, *, semantic_ratio, filters, limit):
         self.called_with = {
-            "query": query, "semantic_ratio": semantic_ratio, "filters": filters, "limit": limit,
+            "query": query,
+            "semantic_ratio": semantic_ratio,
+            "filters": filters,
+            "limit": limit,
         }
         return [{"parent_id": "A", "chunks": [{"id": "1"}]}]
 
@@ -32,7 +35,10 @@ def test_search_tool_delegates_to_sink():
     out = search_tool(sink, "hello", limit=5, semantic_ratio=0.7)
     assert out[0]["parent_id"] == "A"
     assert sink.called_with == {
-        "query": "hello", "semantic_ratio": 0.7, "filters": None, "limit": 5,
+        "query": "hello",
+        "semantic_ratio": 0.7,
+        "filters": None,
+        "limit": 5,
     }
 
 
@@ -127,5 +133,7 @@ def test_resolve_search_key_prefers_search_then_admin():
         resolve_search_key(FundusConfig())  # neither key set
     admin_only = FundusConfig.model_validate({"meilisearch": {"api_key": "ADMIN"}})
     assert resolve_search_key(admin_only) == "ADMIN"  # falls back to the admin key
-    both = FundusConfig.model_validate({"meilisearch": {"api_key": "ADMIN", "search_key": "SEARCH"}})
+    both = FundusConfig.model_validate(
+        {"meilisearch": {"api_key": "ADMIN", "search_key": "SEARCH"}}
+    )
     assert resolve_search_key(both) == "SEARCH"  # scoped key wins when present

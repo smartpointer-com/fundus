@@ -13,7 +13,9 @@ from fundus.models import SourceItem, TextPayload
 def _msgs(n, gap_seconds=60, text="word word word word"):
     base = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
     return [
-        ChatMessage(id=str(i), ts=base + timedelta(seconds=i * gap_seconds), sender=f"u{i % 2}", text=text)
+        ChatMessage(
+            id=str(i), ts=base + timedelta(seconds=i * gap_seconds), sender=f"u{i % 2}", text=text
+        )
         for i in range(n)
     ]
 
@@ -25,14 +27,18 @@ def test_single_window_when_small():
 
 
 def test_splits_on_budget_with_overlap():
-    params = ChatWindowParams(target_tokens=10, max_tokens=30, overlap_messages=1, soft_gap_hours=999)
+    params = ChatWindowParams(
+        target_tokens=10, max_tokens=30, overlap_messages=1, soft_gap_hours=999
+    )
     windows = window_messages(_msgs(12), params)
     assert len(windows) >= 2
     assert windows[0][-1].id == windows[1][0].id  # 1-message overlap
 
 
 def test_long_gap_splits_after_target():
-    params = ChatWindowParams(target_tokens=5, max_tokens=1000, overlap_messages=0, soft_gap_hours=1)
+    params = ChatWindowParams(
+        target_tokens=5, max_tokens=1000, overlap_messages=0, soft_gap_hours=1
+    )
     base = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
     msgs = [
         ChatMessage(id="0", ts=base, sender="a", text="hello world"),
@@ -45,7 +51,9 @@ def test_long_gap_splits_after_target():
 
 
 def test_short_gaps_do_not_split():
-    params = ChatWindowParams(target_tokens=1, max_tokens=1000, overlap_messages=0, soft_gap_hours=6)
+    params = ChatWindowParams(
+        target_tokens=1, max_tokens=1000, overlap_messages=0, soft_gap_hours=6
+    )
     windows = window_messages(_msgs(5, gap_seconds=600), params)  # 10-minute gaps
     assert len(windows) == 1
 
@@ -59,7 +67,9 @@ def test_transcript_render():
 
 
 def test_chat_chunker_reads_item_extra():
-    msgs = [{"id": str(i), "ts": "2024-01-01T12:00:00", "sender": "a", "text": "hi"} for i in range(3)]
+    msgs = [
+        {"id": str(i), "ts": "2024-01-01T12:00:00", "sender": "a", "text": "hi"} for i in range(3)
+    ]
     item = SourceItem(
         source="chat",
         type="wacli",

@@ -95,7 +95,9 @@ def test_upsert_omits_vectors_when_unset():
 
 
 def test_delete_missing():
-    idx = FakeIndex(search_response={"facetDistribution": {"parent_id": {"p1": 2, "p2": 1, "p3": 5}}})
+    idx = FakeIndex(
+        search_response={"facetDistribution": {"parent_id": {"p1": 2, "p2": 1, "p3": 5}}}
+    )
     sink = MeiliSink(index="c", client=FakeClient(idx))
     n = sink.delete_missing("s", live_parent_ids={"p2"})
     assert n == 2
@@ -109,7 +111,13 @@ def test_sink_only_calls_methods_the_real_client_has():
     # on both the real client and the fake.
     from meilisearch.index import Index
 
-    for method in ("add_documents", "delete_documents", "get_documents", "search", "update_settings"):
+    for method in (
+        "add_documents",
+        "delete_documents",
+        "get_documents",
+        "search",
+        "update_settings",
+    ):
         assert hasattr(Index, method), f"real client lost {method}"
         assert hasattr(FakeIndex, method), f"fake missing {method}"
 
@@ -124,9 +132,19 @@ def test_delete_parents_noop_on_empty():
 def test_indexed_manifest_dedupes_and_skips_unfingerprinted():
     docs = [
         {"native_id": "a", "size": 10, "mtime": 100.5, "extract_sig": "tika:", "ocr_used": False},
-        {"native_id": "a", "size": 10, "mtime": 100.5, "extract_sig": "tika:"},  # same file, chunk 2
-        {"native_id": "b", "size": 20, "mtime": 200.0, "extract_sig": "docling-serve:ocrmac",
-         "ocr_used": True},
+        {
+            "native_id": "a",
+            "size": 10,
+            "mtime": 100.5,
+            "extract_sig": "tika:",
+        },  # same file, chunk 2
+        {
+            "native_id": "b",
+            "size": 20,
+            "mtime": 200.0,
+            "extract_sig": "docling-serve:ocrmac",
+            "ocr_used": True,
+        },
         {"native_id": "c", "size": 0, "mtime": 0.0},  # legacy doc without a fingerprint -> skipped
         {"native_id": "d", "size": 5, "mtime": 50.0},  # pre-extract_sig doc -> empty sig
     ]
@@ -139,7 +157,9 @@ def test_indexed_manifest_dedupes_and_skips_unfingerprinted():
         "d": ManifestEntry(FileStat(5, 50.0), "", False),
     }
     assert idx.doc_queries[0]["filter"] == 'source = "docs"'
-    assert "extract_sig" in idx.doc_queries[0]["fields"] and "ocr_used" in idx.doc_queries[0]["fields"]
+    assert (
+        "extract_sig" in idx.doc_queries[0]["fields"] and "ocr_used" in idx.doc_queries[0]["fields"]
+    )
 
 
 def test_indexed_manifest_paginates():

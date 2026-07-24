@@ -146,9 +146,7 @@ def test_default_run_decodes_non_utf8_leniently(monkeypatch):
     class FakeCompleted:
         stdout = b'{"body": "caf\xfc"}'  # 0xfc is a Latin-1 byte, invalid UTF-8
 
-    monkeypatch.setattr(
-        "fundus.sources.notmuch.subprocess.run", lambda *a, **k: FakeCompleted()
-    )
+    monkeypatch.setattr("fundus.sources.notmuch.subprocess.run", lambda *a, **k: FakeCompleted())
     out = NotmuchSource("mail")._default_run(["show"])
     assert json.loads(out)["body"] == "caf�"  # bad byte -> replacement char, JSON still valid
 

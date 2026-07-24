@@ -31,7 +31,6 @@ service_app = typer.Typer(
 )
 
 
-
 @service_app.callback()
 def _guard() -> None:
     if sys.platform != "darwin":
@@ -76,10 +75,15 @@ def install(
         help="LaunchDaemon (root via sudo; runs headless at boot) vs LaunchAgent (login session). "
         "A daemon still runs as you; pick it only if its services are up without login.",
     ),
-    index: bool = typer.Option(True, "--index/--no-index", help="Install the incremental + nightly-full index jobs."),
-    serve: bool = typer.Option(True, "--serve/--no-serve", help="Install the long-running read-only MCP server."),
+    index: bool = typer.Option(
+        True, "--index/--no-index", help="Install the incremental + nightly-full index jobs."
+    ),
+    serve: bool = typer.Option(
+        True, "--serve/--no-serve", help="Install the long-running read-only MCP server."
+    ),
     docling: bool | None = typer.Option(
-        None, "--docling/--no-docling",
+        None,
+        "--docling/--no-docling",
         help="Install the keep-alive job for a bare-metal docling-serve "
         "(default: from config [service.docling].enabled).",
     ),
@@ -110,7 +114,9 @@ def install(
         fundus_bin = manager.ensure_installed_binary()
         # Validate the launch command before writing a KeepAlive plist, and take back argv[0]
         # resolved to an absolute path (launchd won't search PATH for a bare command name).
-        docling_command = manager.ensure_docling_command(svc.docling.command) if include_docling else []
+        docling_command = (
+            manager.ensure_docling_command(svc.docling.command) if include_docling else []
+        )
         plan = Plan(
             kind="daemon" if daemon else "agent",
             label_prefix=label_prefix or svc.label_prefix,
@@ -158,7 +164,9 @@ def install(
 
 @service_app.command()
 def uninstall(
-    daemon: bool | None = typer.Option(None, "--daemon/--agent", help="Override autodetected kind."),
+    daemon: bool | None = typer.Option(
+        None, "--daemon/--agent", help="Override autodetected kind."
+    ),
     label_prefix: str | None = typer.Option(None, help="Job label prefix."),
     config: Path | None = ConfigOpt,
 ) -> None:
@@ -174,7 +182,9 @@ def uninstall(
 
 @service_app.command()
 def status(
-    daemon: bool | None = typer.Option(None, "--daemon/--agent", help="Override autodetected kind."),
+    daemon: bool | None = typer.Option(
+        None, "--daemon/--agent", help="Override autodetected kind."
+    ),
     label_prefix: str | None = typer.Option(None, help="Job label prefix."),
     config: Path | None = ConfigOpt,
 ) -> None:
@@ -191,8 +201,12 @@ def status(
 def restart(
     full: bool = typer.Option(False, "--full", help="Target the nightly-full job."),
     serve: bool = typer.Option(False, "--serve", help="Target the MCP server (else an index job)."),
-    docling: bool = typer.Option(False, "--docling", help="Target the bare-metal docling-serve job."),
-    daemon: bool | None = typer.Option(None, "--daemon/--agent", help="Override autodetected kind."),
+    docling: bool = typer.Option(
+        False, "--docling", help="Target the bare-metal docling-serve job."
+    ),
+    daemon: bool | None = typer.Option(
+        None, "--daemon/--agent", help="Override autodetected kind."
+    ),
     label_prefix: str | None = typer.Option(None, help="Job label prefix."),
     config: Path | None = ConfigOpt,
 ) -> None:
@@ -208,8 +222,12 @@ def restart(
 
 @service_app.command()
 def run(
-    full: bool = typer.Option(False, "--full", help="Trigger the nightly-full job (else incremental)."),
-    daemon: bool | None = typer.Option(None, "--daemon/--agent", help="Override autodetected kind."),
+    full: bool = typer.Option(
+        False, "--full", help="Trigger the nightly-full job (else incremental)."
+    ),
+    daemon: bool | None = typer.Option(
+        None, "--daemon/--agent", help="Override autodetected kind."
+    ),
     label_prefix: str | None = typer.Option(None, help="Job label prefix."),
     config: Path | None = ConfigOpt,
 ) -> None:

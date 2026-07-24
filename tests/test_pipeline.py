@@ -61,7 +61,9 @@ class FakeExtractor:
         self.calls += 1
         return ExtractionResult(
             engine=EngineRef(name="fake", version="1"),
-            blocks=[Block(type="paragraph", text="EXTRACTED:" + req.data.decode("utf-8", "replace"))],
+            blocks=[
+                Block(type="paragraph", text="EXTRACTED:" + req.data.decode("utf-8", "replace"))
+            ],
             markdown="EXTRACTED",
             metadata=DocMeta(),
         )
@@ -112,14 +114,22 @@ def _pipeline(sink, extractor):
 
 
 def _item(**kw):
-    base = {"source": "s", "type": "x", "native_id": "n", "item_kind": "file", "ts": datetime(2024, 1, 1, tzinfo=UTC)}
+    base = {
+        "source": "s",
+        "type": "x",
+        "native_id": "n",
+        "item_kind": "file",
+        "ts": datetime(2024, 1, 1, tzinfo=UTC),
+    }
     base.update(kw)
     return SourceItem(**base)
 
 
 def test_email_text_path_skips_extractor():
     sink, ex = FakeSink(), FakeExtractor()
-    item = _item(source="mail", item_kind="email", title="S", payload=TextPayload(text="email body"))
+    item = _item(
+        source="mail", item_kind="email", title="S", payload=TextPayload(text="email body")
+    )
     n = _pipeline(sink, ex).index_source(FakeSource("mail", [item]))
     assert n >= 1 and ex.calls == 0
     assert any("email body" in d.body for d in sink.docs)
@@ -127,7 +137,13 @@ def test_email_text_path_skips_extractor():
 
 def test_pdf_uses_extractor():
     sink, ex = FakeSink(), FakeExtractor()
-    item = _item(source="docs", native_id="f.pdf", mime_type="application/pdf", title="f.pdf", payload=BlobPayload(data=b"PDFBYTES"))
+    item = _item(
+        source="docs",
+        native_id="f.pdf",
+        mime_type="application/pdf",
+        title="f.pdf",
+        payload=BlobPayload(data=b"PDFBYTES"),
+    )
     _pipeline(sink, ex).index_source(FakeSource("docs", [item]))
     assert ex.calls == 1
     assert any("EXTRACTED" in d.body for d in sink.docs)
@@ -135,7 +151,12 @@ def test_pdf_uses_extractor():
 
 def test_text_file_skips_extractor():
     sink, ex = FakeSink(), FakeExtractor()
-    item = _item(source="docs", native_id="a.txt", mime_type="text/plain", payload=BlobPayload(data=b"plain text content"))
+    item = _item(
+        source="docs",
+        native_id="a.txt",
+        mime_type="text/plain",
+        payload=BlobPayload(data=b"plain text content"),
+    )
     _pipeline(sink, ex).index_source(FakeSource("docs", [item]))
     assert ex.calls == 0
     assert any("plain text content" in d.body for d in sink.docs)
@@ -143,7 +164,12 @@ def test_text_file_skips_extractor():
 
 def test_tabular_file_chunked():
     sink, ex = FakeSink(), FakeExtractor()
-    item = _item(source="docs", native_id="s.csv", mime_type="text/csv", payload=BlobPayload(data=b"a,b\n1,2\n"))
+    item = _item(
+        source="docs",
+        native_id="s.csv",
+        mime_type="text/csv",
+        payload=BlobPayload(data=b"a,b\n1,2\n"),
+    )
     _pipeline(sink, ex).index_source(FakeSource("docs", [item]))
     assert ex.calls == 0
     assert any("a | b" in d.body for d in sink.docs)
@@ -152,7 +178,13 @@ def test_tabular_file_chunked():
 def test_chat_indexed_with_meta():
     sink, ex = FakeSink(), FakeExtractor()
     msgs = [{"id": "1", "ts": "2024-01-01T00:00:00", "sender": "a", "text": "hi"}]
-    item = _item(source="chat", native_id="jid", item_kind="chat_window", payload=TextPayload(text=""), extra={"messages": msgs})
+    item = _item(
+        source="chat",
+        native_id="jid",
+        item_kind="chat_window",
+        payload=TextPayload(text=""),
+        extra={"messages": msgs},
+    )
     _pipeline(sink, ex).index_source(FakeSource("chat", [item]))
     assert any(d.msg_ids == ["1"] for d in sink.docs)
 
@@ -160,7 +192,9 @@ def test_chat_indexed_with_meta():
 def test_cursor_advances():
     sink, ex = FakeSink(), FakeExtractor()
     p = _pipeline(sink, ex)
-    p.index_source(FakeSource("mail", [_item(source="mail", item_kind="email", payload=TextPayload(text="x"))]))
+    p.index_source(
+        FakeSource("mail", [_item(source="mail", item_kind="email", payload=TextPayload(text="x"))])
+    )
     assert p._state.get_cursor("mail") == "C1"
 
 
@@ -202,8 +236,14 @@ def test_index_source_parallel_indexes_all_and_survives_failures():
         for i in range(6)
     ]
     pipeline = Pipeline(
-        FundusConfig(), sink, FlakyExtractor(), DictCache(), DictState(),
-        batch_size=2, workers=4, retry_backoff=0.0,
+        FundusConfig(),
+        sink,
+        FlakyExtractor(),
+        DictCache(),
+        DictState(),
+        batch_size=2,
+        workers=4,
+        retry_backoff=0.0,
     )
     n = pipeline.index_source(FakeSource("docs", items))
     assert n == 5  # the failing item is skipped, the other 5 indexed
@@ -224,12 +264,21 @@ def test_process_item_retries_transient_transport_failure():
 
     sink = FakeSink()
     item = _item(
-        source="docs", native_id="f.pdf", mime_type="application/pdf",
-        title="f.pdf", payload=BlobPayload(data=b"PDFBYTES"),
+        source="docs",
+        native_id="f.pdf",
+        mime_type="application/pdf",
+        title="f.pdf",
+        payload=BlobPayload(data=b"PDFBYTES"),
     )
     pipeline = Pipeline(
-        FundusConfig(), sink, FlakyOnce(), DictCache(), DictState(),
-        batch_size=2, max_attempts=2, retry_backoff=0.0,
+        FundusConfig(),
+        sink,
+        FlakyOnce(),
+        DictCache(),
+        DictState(),
+        batch_size=2,
+        max_attempts=2,
+        retry_backoff=0.0,
     )
     n = pipeline.index_source(FakeSource("docs", [item]))
     assert n == 1 and len(sink.docs) == 1  # retried past the transient failure
@@ -248,8 +297,13 @@ def test_pipeline_fanout_embeds_documents():
     sink = FakeSink()
     item = _item(source="mail", item_kind="email", title="Subj", payload=TextPayload(text="a body"))
     pipeline = Pipeline(
-        FundusConfig(), sink, FakeExtractor(), DictCache(), DictState(),
-        batch_size=10, doc_embedder=emb,
+        FundusConfig(),
+        sink,
+        FakeExtractor(),
+        DictCache(),
+        DictState(),
+        batch_size=10,
+        doc_embedder=emb,
     )
     pipeline.index_source(FakeSource("mail", [item]))
     assert sink.docs and all(d.vector is not None for d in sink.docs)
@@ -269,21 +323,37 @@ def test_pipeline_embed_cache_hit_skips_embedder(tmp_path):
 
     emb = CountingEmbedder()
     cache = SqliteEmbeddingCache(str(tmp_path / "e.db"), "m")
-    item = _item(source="mail", item_kind="email", title="S", payload=TextPayload(text="hello body"))
-    p1 = Pipeline(FundusConfig(), FakeSink(), FakeExtractor(), DictCache(), DictState(),
-                  batch_size=10, doc_embedder=emb, embed_cache=cache)
+    item = _item(
+        source="mail", item_kind="email", title="S", payload=TextPayload(text="hello body")
+    )
+    p1 = Pipeline(
+        FundusConfig(),
+        FakeSink(),
+        FakeExtractor(),
+        DictCache(),
+        DictState(),
+        batch_size=10,
+        doc_embedder=emb,
+        embed_cache=cache,
+    )
     p1.index_source(FakeSource("mail", [item]))
     first = emb.calls
     assert first >= 1
     # re-running the same content hits the cache -> no further embedder calls
     sink2 = FakeSink()
-    p2 = Pipeline(FundusConfig(), sink2, FakeExtractor(), DictCache(), DictState(),
-                  batch_size=10, doc_embedder=emb, embed_cache=cache)
+    p2 = Pipeline(
+        FundusConfig(),
+        sink2,
+        FakeExtractor(),
+        DictCache(),
+        DictState(),
+        batch_size=10,
+        doc_embedder=emb,
+        embed_cache=cache,
+    )
     p2.index_source(FakeSource("mail", [item]))
     assert emb.calls == first  # served from cache
-    assert sink2.docs and all(
-        d.vector == pytest.approx([0.5, 0.6], abs=1e-6) for d in sink2.docs
-    )
+    assert sink2.docs and all(d.vector == pytest.approx([0.5, 0.6], abs=1e-6) for d in sink2.docs)
 
 
 def test_pipeline_without_embedder_leaves_vectors_unset():
@@ -303,12 +373,21 @@ def test_process_item_does_not_retry_permanent_failure():
 
     ex = AlwaysHttpError()
     item = _item(
-        source="docs", native_id="f.pdf", mime_type="application/pdf",
-        title="f.pdf", payload=BlobPayload(data=b"PDFBYTES"),
+        source="docs",
+        native_id="f.pdf",
+        mime_type="application/pdf",
+        title="f.pdf",
+        payload=BlobPayload(data=b"PDFBYTES"),
     )
     pipeline = Pipeline(
-        FundusConfig(), FakeSink(), ex, DictCache(), DictState(),
-        batch_size=2, max_attempts=3, retry_backoff=0.0,
+        FundusConfig(),
+        FakeSink(),
+        ex,
+        DictCache(),
+        DictState(),
+        batch_size=2,
+        max_attempts=3,
+        retry_backoff=0.0,
     )
     n = pipeline.index_source(FakeSource("docs", [item]))
     assert n == 0 and ex.calls == 1  # definitive 504: tried once, not retried
@@ -342,9 +421,16 @@ class FakeTreeSource:
             return None
         stat, data = self._files[native_id]
         return SourceItem(
-            source=self.name, type="files", native_id=native_id, item_kind="file",
-            title=native_id, path=native_id, mime_type=self._mime,
-            size=stat.size, mtime=stat.mtime, ts=datetime(2024, 1, 1, tzinfo=UTC),
+            source=self.name,
+            type="files",
+            native_id=native_id,
+            item_kind="file",
+            title=native_id,
+            path=native_id,
+            mime_type=self._mime,
+            size=stat.size,
+            mtime=stat.mtime,
+            ts=datetime(2024, 1, 1, tzinfo=UTC),
             payload=BlobPayload(data=data),
         )
 
@@ -355,9 +441,9 @@ def test_full_tree_reconcile_reindexes_changed_and_drops_removed():
     disk = {"a": (FileStat(3, 200.0), b"aaa"), "c": (FileStat(2, 100.0), b"cc")}
     sink = FakeSink(manifest=indexed)
     src = FakeTreeSource("docs", disk)
-    n = Pipeline(FundusConfig(), sink, FakeExtractor(), DictCache(), DictState(), batch_size=10).index_source(
-        src, full=True
-    )
+    n = Pipeline(
+        FundusConfig(), sink, FakeExtractor(), DictCache(), DictState(), batch_size=10
+    ).index_source(src, full=True)
     reindexed = {d.native_id for d in sink.docs}
     assert reindexed == {"a", "c"}  # edited + new re-indexed; unchanged 'b' not touched
     assert n == len(sink.docs)
@@ -408,11 +494,13 @@ def test_full_tree_reconcile_allows_bounded_prune():
 def test_index_contains_a_failing_source_and_still_runs_the_rest(monkeypatch):
     # A source that blows up before yielding its first item (e.g. an unparseable cursor)
     # must not freeze the cursors of every source configured after it.
-    cfg = FundusConfig(sources=[
-        SourceConfig(name="mail", type="x"),
-        SourceConfig(name="slack", type="x"),
-        SourceConfig(name="documents", type="x"),
-    ])
+    cfg = FundusConfig(
+        sources=[
+            SourceConfig(name="mail", type="x"),
+            SourceConfig(name="slack", type="x"),
+            SourceConfig(name="documents", type="x"),
+        ]
+    )
 
     class Exploding(FakeSource):
         def changed(self, cursor):
@@ -421,7 +509,9 @@ def test_index_contains_a_failing_source_and_still_runs_the_rest(monkeypatch):
     def fake_build(source_cfg):
         if source_cfg.name == "slack":
             return Exploding("slack", [])
-        return FakeSource(source_cfg.name, [_item(source=source_cfg.name, payload=TextPayload(text="hi"))])
+        return FakeSource(
+            source_cfg.name, [_item(source=source_cfg.name, payload=TextPayload(text="hi"))]
+        )
 
     monkeypatch.setattr("fundus.core.pipeline.build_source", fake_build)
     state = DictState()
@@ -451,8 +541,12 @@ def test_docs_carry_extract_sig_and_ocr_used():
             )
 
     sink = FakeSink()
-    item = _item(source="docs", native_id="s.pdf", mime_type="application/pdf",
-                 payload=BlobPayload(data=b"%PDF"))
+    item = _item(
+        source="docs",
+        native_id="s.pdf",
+        mime_type="application/pdf",
+        payload=BlobPayload(data=b"%PDF"),
+    )
     _pipeline(sink, OcrExtractor()).index_source(FakeSource("docs", [item]))
     assert sink.docs and all(d.extract_sig == "docling-serve:ocrmac" for d in sink.docs)
     assert all(d.ocr_used for d in sink.docs)
@@ -462,8 +556,12 @@ def test_legacy_cached_result_sig_falls_back_to_current_fingerprint():
     # Results cached before engine_fingerprint existed deserialize with None; the sig then
     # falls back to the producing engine's CURRENT fingerprint (FakeExtractor stamps nothing).
     sink, ex = FakeSink(), FakeExtractor()
-    item = _item(source="docs", native_id="f.pdf", mime_type="application/pdf",
-                 payload=BlobPayload(data=b"PDFBYTES"))
+    item = _item(
+        source="docs",
+        native_id="f.pdf",
+        mime_type="application/pdf",
+        payload=BlobPayload(data=b"PDFBYTES"),
+    )
     _pipeline(sink, ex).index_source(FakeSource("docs", [item]))
     assert sink.docs and all(d.extract_sig == "fake:" for d in sink.docs)
 
@@ -495,9 +593,9 @@ def test_full_tree_reconcile_reparses_on_extract_sig_drift():
     cache = DictCache()
     src = FakeTreeSource("docs", disk, mime="application/pdf")
     # Seed the cache under the OLD settings.
-    Pipeline(FundusConfig(), FakeSink(), _SigEngine("OLD", "OLD TEXT"), cache, DictState()).index_source(
-        src, full=True
-    )
+    Pipeline(
+        FundusConfig(), FakeSink(), _SigEngine("OLD", "OLD TEXT"), cache, DictState()
+    ).index_source(src, full=True)
     sink = FakeSink(manifest={"a": ManifestEntry(stat, "fake:OLD", False)})
     ex = _SigEngine("NEW", "NEW TEXT")
     Pipeline(FundusConfig(), sink, ex, cache, DictState()).index_source(src, full=True)
@@ -512,10 +610,12 @@ def test_full_tree_reconcile_ignores_missing_and_foreign_sigs():
     # doesn't know must NOT re-parse: they converge on their natural re-index or via reparse.
     stat = FileStat(2, 100.0)
     disk = {"a": (stat, b"aa"), "b": (stat, b"bb")}
-    sink = FakeSink(manifest={
-        "a": ManifestEntry(stat, "", False),
-        "b": ManifestEntry(stat, "someother:xyz", False),
-    })
+    sink = FakeSink(
+        manifest={
+            "a": ManifestEntry(stat, "", False),
+            "b": ManifestEntry(stat, "someother:xyz", False),
+        }
+    )
     ex = FakeExtractor()
     Pipeline(FundusConfig(), sink, ex, DictCache(), DictState()).index_source(
         FakeTreeSource("docs", disk, mime="application/pdf"), full=True
@@ -559,9 +659,9 @@ def test_reparse_keeps_old_docs_when_extraction_fails():
 
 def test_reparse_counts_vanished_files():
     src = FakeTreeSource("docs", {}, mime="application/pdf")
-    counts = Pipeline(FundusConfig(), FakeSink(), FakeExtractor(), DictCache(), DictState()).reparse(
-        src, ["gone"]
-    )
+    counts = Pipeline(
+        FundusConfig(), FakeSink(), FakeExtractor(), DictCache(), DictState()
+    ).reparse(src, ["gone"])
     assert counts == {"selected": 1, "reparsed": 0, "missing": 1, "failed": 0, "chunks": 0}
 
 
@@ -577,7 +677,11 @@ def test_engine_detected_languages_reach_the_index_doc():
             )
 
     sink = FakeSink()
-    item = _item(source="docs", native_id="f.pdf", mime_type="application/pdf",
-                 payload=BlobPayload(data=b"PDFBYTES"))
+    item = _item(
+        source="docs",
+        native_id="f.pdf",
+        mime_type="application/pdf",
+        payload=BlobPayload(data=b"PDFBYTES"),
+    )
     _pipeline(sink, LangExtractor()).index_source(FakeSource("docs", [item]))
     assert sink.docs and all(d.lang == ["de"] for d in sink.docs)

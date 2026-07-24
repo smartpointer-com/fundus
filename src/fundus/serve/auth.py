@@ -24,8 +24,11 @@ def bearer_guard(app: ASGIApp, token: str) -> ASGIApp:
             headers = dict(scope.get("headers") or [])
             if not hmac.compare_digest(headers.get(b"authorization", b""), expected):
                 await send(
-                    {"type": "http.response.start", "status": 401,
-                     "headers": [(b"content-type", b"text/plain")]}
+                    {
+                        "type": "http.response.start",
+                        "status": 401,
+                        "headers": [(b"content-type", b"text/plain")],
+                    }
                 )
                 await send({"type": "http.response.body", "body": b"unauthorized"})
                 return

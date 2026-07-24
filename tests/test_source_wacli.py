@@ -32,8 +32,10 @@ def _add_message(path, values):
 
 def _src(path, **kw):
     return WacliSource(
-        "chat", db=str(path),
-        connect=lambda: sqlite3.connect(f"file:{path}?mode=ro", uri=True), **kw,
+        "chat",
+        db=str(path),
+        connect=lambda: sqlite3.connect(f"file:{path}?mode=ro", uri=True),
+        **kw,
     )
 
 
@@ -72,16 +74,44 @@ def test_wacli_live_ids_includes_present_document_media(tmp_path):
     media_file = tmp_path / "media" / "chatA" / "9" / "document" / "invoice.pdf"
     media_file.parent.mkdir(parents=True)
     media_file.write_bytes(b"%PDF-1.7 fake")
-    _add_message(db, ("9", "chatA", "Alice", 1700000300, "Alice", None, "doc", None,
-                      "document", "invoice.pdf", "application/pdf",
-                      "/OLD/STORE/media/chatA/9/document/invoice.pdf"))
+    _add_message(
+        db,
+        (
+            "9",
+            "chatA",
+            "Alice",
+            1700000300,
+            "Alice",
+            None,
+            "doc",
+            None,
+            "document",
+            "invoice.pdf",
+            "application/pdf",
+            "/OLD/STORE/media/chatA/9/document/invoice.pdf",
+        ),
+    )
     # a document whose local file is gone must NOT be live (so --full prunes it)
-    _add_message(db, ("11", "chatA", "Alice", 1700000400, "Alice", None, None, None,
-                      "document", "gone.pdf", "application/pdf",
-                      "/x/media/chatA/11/document/gone.pdf"))
+    _add_message(
+        db,
+        (
+            "11",
+            "chatA",
+            "Alice",
+            1700000400,
+            "Alice",
+            None,
+            None,
+            None,
+            "document",
+            "gone.pdf",
+            "application/pdf",
+            "/x/media/chatA/11/document/gone.pdf",
+        ),
+    )
     ids = set(_src(db).live_ids())
-    assert "9" in ids and "11" not in ids      # present media is live; missing is pruned
-    assert {"chatA", "chatB"} <= ids           # chats still live
+    assert "9" in ids and "11" not in ids  # present media is live; missing is pruned
+    assert {"chatA", "chatB"} <= ids  # chats still live
 
 
 def test_to_datetime_units():
@@ -97,12 +127,41 @@ def test_wacli_emits_document_media_items(tmp_path):
     media_file.parent.mkdir(parents=True)
     media_file.write_bytes(b"%PDF-1.7 fake")
     # stale absolute base in local_path -> must be reconstructed against the current media dir
-    _add_message(db, ("9", "chatA", "Alice", 1700000300, "Alice", None, "here's the doc", None,
-                      "document", "invoice.pdf", "application/pdf",
-                      "/OLD/STORE/media/chatA/9/document/invoice.pdf"))
+    _add_message(
+        db,
+        (
+            "9",
+            "chatA",
+            "Alice",
+            1700000300,
+            "Alice",
+            None,
+            "here's the doc",
+            None,
+            "document",
+            "invoice.pdf",
+            "application/pdf",
+            "/OLD/STORE/media/chatA/9/document/invoice.pdf",
+        ),
+    )
     # an image share must NOT be emitted as a file (documents only)
-    _add_message(db, ("10", "chatA", "Alice", 1700000360, "Alice", None, None, None,
-                      "image", "photo.jpg", "image/jpeg", "/x/media/chatA/10/image/photo.jpg"))
+    _add_message(
+        db,
+        (
+            "10",
+            "chatA",
+            "Alice",
+            1700000360,
+            "Alice",
+            None,
+            None,
+            None,
+            "image",
+            "photo.jpg",
+            "image/jpeg",
+            "/x/media/chatA/10/image/photo.jpg",
+        ),
+    )
     files = [i for i in _src(db).changed(None) if i.item_kind == "file"]
     assert len(files) == 1
     f = files[0]
@@ -119,35 +178,95 @@ def test_wacli_media_tags_are_configurable(tmp_path):
     media_file = tmp_path / "media" / "chatA" / "9" / "document" / "invoice.pdf"
     media_file.parent.mkdir(parents=True)
     media_file.write_bytes(b"%PDF-1.7 fake")
-    _add_message(db, ("9", "chatA", "Alice", 1700000300, "Alice", None, "doc", None,
-                      "document", "invoice.pdf", "application/pdf",
-                      "/OLD/STORE/media/chatA/9/document/invoice.pdf"))
-    files = [i for i in _src(db, tags=("slack", "attachment")).changed(None) if i.item_kind == "file"]
+    _add_message(
+        db,
+        (
+            "9",
+            "chatA",
+            "Alice",
+            1700000300,
+            "Alice",
+            None,
+            "doc",
+            None,
+            "document",
+            "invoice.pdf",
+            "application/pdf",
+            "/OLD/STORE/media/chatA/9/document/invoice.pdf",
+        ),
+    )
+    files = [
+        i for i in _src(db, tags=("slack", "attachment")).changed(None) if i.item_kind == "file"
+    ]
     assert files[0].tags == ["slack", "attachment"]
 
 
 def test_wacli_skips_media_when_file_missing(tmp_path):
     db = tmp_path / "w.db"
     _make_db(db)
-    _add_message(db, ("9", "chatA", "Alice", 1700000300, "Alice", None, None, None,
-                      "document", "gone.pdf", "application/pdf",
-                      "/x/media/chatA/9/document/gone.pdf"))  # no such file on disk
+    _add_message(
+        db,
+        (
+            "9",
+            "chatA",
+            "Alice",
+            1700000300,
+            "Alice",
+            None,
+            None,
+            None,
+            "document",
+            "gone.pdf",
+            "application/pdf",
+            "/x/media/chatA/9/document/gone.pdf",
+        ),
+    )  # no such file on disk
     assert all(i.item_kind != "file" for i in _src(db).changed(None))
 
 
 def test_wacli_skips_media_without_local_path(tmp_path):
     db = tmp_path / "w.db"
     _make_db(db)
-    _add_message(db, ("9", "chatA", "Alice", 1700000300, "Alice", None, None, None,
-                      "document", "undownloaded.pdf", "application/pdf", None))
+    _add_message(
+        db,
+        (
+            "9",
+            "chatA",
+            "Alice",
+            1700000300,
+            "Alice",
+            None,
+            None,
+            None,
+            "document",
+            "undownloaded.pdf",
+            "application/pdf",
+            None,
+        ),
+    )
     assert all(i.item_kind != "file" for i in _src(db).changed(None))
 
 
 def test_wacli_media_can_be_disabled(tmp_path):
     db = tmp_path / "w.db"
     _make_db(db)
-    _add_message(db, ("9", "chatA", "Alice", 1700000300, "Alice", None, None, None,
-                      "document", "x.pdf", "application/pdf", "/p/x.pdf"))
+    _add_message(
+        db,
+        (
+            "9",
+            "chatA",
+            "Alice",
+            1700000300,
+            "Alice",
+            None,
+            None,
+            None,
+            "document",
+            "x.pdf",
+            "application/pdf",
+            "/p/x.pdf",
+        ),
+    )
     assert all(i.item_kind != "file" for i in _src(db, media=False).changed(None))
 
 
@@ -156,8 +275,10 @@ def test_wacli_accepts_a_fractional_cursor(tmp_path):
     # fractional cursor; the connector must be able to read back its own cursor.
     db = tmp_path / "w.db"
     _make_db(db)
-    _add_message(db, ("9", "chatC", "Carol", 1700000300.5, "Carol", "later", None, None,
-                      None, None, None, None))
+    _add_message(
+        db,
+        ("9", "chatC", "Carol", 1700000300.5, "Carol", "later", None, None, None, None, None, None),
+    )
     src = _src(db)
     list(src.changed(None))
     cursor = src.current_cursor()

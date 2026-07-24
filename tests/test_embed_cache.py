@@ -36,7 +36,11 @@ def test_backfill_from_index(tmp_path):
     pages = [
         {
             "results": [
-                {"title": "A", "body": "a body", "_vectors": {"default": {"embeddings": [[0.1, 0.2]]}}},
+                {
+                    "title": "A",
+                    "body": "a body",
+                    "_vectors": {"default": {"embeddings": [[0.1, 0.2]]}},
+                },
                 {"title": None, "body": "b body", "_vectors": {"default": [0.3, 0.4]}},
                 {"title": "C", "body": "c", "_vectors": {}},  # no vector -> skipped
             ]

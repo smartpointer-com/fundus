@@ -63,7 +63,7 @@ def test_cli_help_lists_commands_grouped_by_theme():
 
 def _connect_config(tmp_path, extra=""):
     f = tmp_path / "fundus.toml"
-    f.write_text(f'[serve]\nport = 9999\n{extra}')
+    f.write_text(f"[serve]\nport = 9999\n{extra}")
     return f
 
 
@@ -77,7 +77,7 @@ def test_cli_connect_prints_filled_in_registrations(tmp_path, monkeypatch):
     assert "openclaw mcp add fundus --url http://127.0.0.1:9999/mcp" in result.output
     assert "claude mcp add --transport http fundus http://127.0.0.1:9999/mcp" in result.output
     assert result.output.count("Bearer sekrit") == 3  # all three blocks carry the real token
-    stanza = result.output[result.output.index("{"):]
+    stanza = result.output[result.output.index("{") :]
     assert json.loads(stanza)["fundus"]["url"] == "http://127.0.0.1:9999/mcp"
 
 
@@ -188,10 +188,12 @@ def _reparse_config(tmp_path):
 def test_cli_reparse_dry_run_selects_ocr_only(tmp_path, monkeypatch):
     from fundus.models import FileStat, ManifestEntry
 
-    manifest = {"docs": {
-        "/t/a.pdf": ManifestEntry(FileStat(1, 1.0), "docling-serve:easyocr", True),
-        "/t/b.pdf": ManifestEntry(FileStat(1, 1.0), "tika:", False),
-    }}
+    manifest = {
+        "docs": {
+            "/t/a.pdf": ManifestEntry(FileStat(1, 1.0), "docling-serve:easyocr", True),
+            "/t/b.pdf": ManifestEntry(FileStat(1, 1.0), "tika:", False),
+        }
+    }
     monkeypatch.setattr("fundus.cli.build_sink", lambda cfg: _FakeManifestSink(manifest))
     result = runner.invoke(
         app, ["reparse", "--ocr-only", "--dry-run", "--config", str(_reparse_config(tmp_path))]
@@ -204,14 +206,23 @@ def test_cli_reparse_dry_run_selects_ocr_only(tmp_path, monkeypatch):
 def test_cli_reparse_path_prefix_filters(tmp_path, monkeypatch):
     from fundus.models import FileStat, ManifestEntry
 
-    manifest = {"docs": {
-        "/x/a.pdf": ManifestEntry(FileStat(1, 1.0), "tika:", False),
-        "/y/b.pdf": ManifestEntry(FileStat(1, 1.0), "tika:", False),
-    }}
+    manifest = {
+        "docs": {
+            "/x/a.pdf": ManifestEntry(FileStat(1, 1.0), "tika:", False),
+            "/y/b.pdf": ManifestEntry(FileStat(1, 1.0), "tika:", False),
+        }
+    }
     monkeypatch.setattr("fundus.cli.build_sink", lambda cfg: _FakeManifestSink(manifest))
     result = runner.invoke(
         app,
-        ["reparse", "--path-prefix", "/x/", "--dry-run", "--config", str(_reparse_config(tmp_path))],
+        [
+            "reparse",
+            "--path-prefix",
+            "/x/",
+            "--dry-run",
+            "--config",
+            str(_reparse_config(tmp_path)),
+        ],
     )
     assert result.exit_code == 0
     assert "docs: would re-parse 1 documents" in result.output
@@ -220,7 +231,8 @@ def test_cli_reparse_path_prefix_filters(tmp_path, monkeypatch):
 def test_cli_reparse_rejects_non_tree_source(tmp_path, monkeypatch):
     monkeypatch.setattr("fundus.cli.build_sink", lambda cfg: _FakeManifestSink({}))
     result = runner.invoke(
-        app, ["reparse", "--source", "mail", "--dry-run", "--config", str(_reparse_config(tmp_path))]
+        app,
+        ["reparse", "--source", "mail", "--dry-run", "--config", str(_reparse_config(tmp_path))],
     )
     assert result.exit_code == 2
     assert "not a file-tree source" in result.output
@@ -229,7 +241,8 @@ def test_cli_reparse_rejects_non_tree_source(tmp_path, monkeypatch):
 def test_cli_reparse_rejects_unknown_source(tmp_path, monkeypatch):
     monkeypatch.setattr("fundus.cli.build_sink", lambda cfg: _FakeManifestSink({}))
     result = runner.invoke(
-        app, ["reparse", "--source", "nope", "--dry-run", "--config", str(_reparse_config(tmp_path))]
+        app,
+        ["reparse", "--source", "nope", "--dry-run", "--config", str(_reparse_config(tmp_path))],
     )
     assert result.exit_code == 2
     assert "no source named" in result.output

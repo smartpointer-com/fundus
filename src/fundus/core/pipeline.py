@@ -427,9 +427,7 @@ def _query_embedder(config: FundusConfig) -> EmbeddingClient | None:
 def build_sink(config: FundusConfig) -> MeiliSink:
     embedder_cfg = config.embedder
     embedders = (
-        user_provided_embedder(embedder_cfg)
-        if embedder_cfg.fanout
-        else rest_embedder(embedder_cfg)
+        user_provided_embedder(embedder_cfg) if embedder_cfg.fanout else rest_embedder(embedder_cfg)
     )
     return MeiliSink(
         url=config.meilisearch.url,
@@ -450,7 +448,9 @@ def resolve_search_key(config: FundusConfig) -> str:
     mc = config.meilisearch
     key = mc.search_key or mc.api_key
     if not key:
-        raise RuntimeError("no Meili key: set FUNDUS_MEILI_KEY (or a scoped FUNDUS_MEILI_SEARCH_KEY)")
+        raise RuntimeError(
+            "no Meili key: set FUNDUS_MEILI_KEY (or a scoped FUNDUS_MEILI_SEARCH_KEY)"
+        )
     return key
 
 

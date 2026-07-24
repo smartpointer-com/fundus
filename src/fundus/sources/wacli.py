@@ -164,7 +164,12 @@ class WacliSource:
             (chat,),
         ).fetchall()
         messages = [
-            {"id": str(r[0]), "ts": to_datetime(r[1]).isoformat(), "sender": r[2] or "", "text": r[3]}
+            {
+                "id": str(r[0]),
+                "ts": to_datetime(r[1]).isoformat(),
+                "sender": r[2] or "",
+                "text": r[3],
+            }
             for r in rows
             if (r[3] or "").strip()
         ]

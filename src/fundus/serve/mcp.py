@@ -19,7 +19,11 @@ from fundus.core.pipeline import build_search_sink
 
 
 def _compile_filter(
-    source: str | None, item_kind: str | None, since: int | None, until: int | None, filters: str | None
+    source: str | None,
+    item_kind: str | None,
+    since: int | None,
+    until: int | None,
+    filters: str | None,
 ) -> str | None:
     """Combine the typed convenience params and any raw expression into one Meilisearch filter
     (ANDed). The typed params spare the caller from writing Meili's filter DSL for the common cases;
@@ -75,13 +79,15 @@ def sources_tool(sink: Any, config: FundusConfig) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for s in config.sources:
         data = s.model_dump()
-        out.append({
-            "name": s.name,
-            "type": s.type,
-            "roots": data.get("roots"),
-            "db": data.get("db"),
-            "indexed_docs": int(counts.get(s.name, 0)),
-        })
+        out.append(
+            {
+                "name": s.name,
+                "type": s.type,
+                "roots": data.get("roots"),
+                "db": data.get("db"),
+                "indexed_docs": int(counts.get(s.name, 0)),
+            }
+        )
     return out
 
 
@@ -117,32 +123,50 @@ def build_mcp(sink: Any, config: FundusConfig) -> Any:
         query: str,
         limit: int = 20,
         semantic_ratio: float = 0.5,
-        source: Annotated[str | None, Field(description=(
-            'Restrict to ONE indexed source by name (e.g. "mail", "chat", "documents"); call '
-            "`sources` for the exact names. Compiled to a filter for you — prefer this over `filters`."
-        ))] = None,
-        item_kind: Annotated[str | None, Field(description=(
-            'Restrict to one item kind, e.g. "file", "email", "chat_window".'
-        ))] = None,
-        since: Annotated[int | None, Field(
-            description="Only items at/after this Unix epoch time (seconds)."
-        )] = None,
-        until: Annotated[int | None, Field(
-            description="Only items at/before this Unix epoch time (seconds)."
-        )] = None,
-        filters: Annotated[str | None, Field(description=(
-            "Advanced: a raw Meilisearch filter, ANDed with the params above. Meili syntax only — "
-            'source = "mail", item_kind IN ["file","email"], ts > 1735689600 — NOT `field:value` '
-            "(no colons). Filterable fields: source, item_kind, ts, actors, tags, path, mime, lang."
-        ))] = None,
+        source: Annotated[
+            str | None,
+            Field(
+                description=(
+                    'Restrict to ONE indexed source by name (e.g. "mail", "chat", "documents"); call '
+                    "`sources` for the exact names. Compiled to a filter for you — prefer this over `filters`."
+                )
+            ),
+        ] = None,
+        item_kind: Annotated[
+            str | None,
+            Field(description=('Restrict to one item kind, e.g. "file", "email", "chat_window".')),
+        ] = None,
+        since: Annotated[
+            int | None, Field(description="Only items at/after this Unix epoch time (seconds).")
+        ] = None,
+        until: Annotated[
+            int | None, Field(description="Only items at/before this Unix epoch time (seconds).")
+        ] = None,
+        filters: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Advanced: a raw Meilisearch filter, ANDed with the params above. Meili syntax only — "
+                    'source = "mail", item_kind IN ["file","email"], ts > 1735689600 — NOT `field:value` '
+                    "(no colons). Filterable fields: source, item_kind, ts, actors, tags, path, mime, lang."
+                )
+            ),
+        ] = None,
     ) -> list[dict[str, Any]]:
         """Search the indexed corpus (email, chat, documents). Returns matching artifacts grouped
         by parent and ranked by hybrid keyword+semantic relevance; each carries a ref/path to open.
         To narrow results, PREFER the typed source/item_kind/since/until parameters; use `filters`
         only for advanced expressions."""
         return search_tool(
-            sink, query, limit=limit, semantic_ratio=semantic_ratio,
-            source=source, item_kind=item_kind, since=since, until=until, filters=filters,
+            sink,
+            query,
+            limit=limit,
+            semantic_ratio=semantic_ratio,
+            source=source,
+            item_kind=item_kind,
+            since=since,
+            until=until,
+            filters=filters,
         )
 
     @server.tool()
@@ -186,4 +210,6 @@ def run_server(
     from fundus.serve.auth import bearer_guard
 
     app = server.sse_app() if transport == "sse" else server.streamable_http_app()
-    uvicorn.run(bearer_guard(app, config.serve.token), host=config.serve.host, port=config.serve.port)
+    uvicorn.run(
+        bearer_guard(app, config.serve.token), host=config.serve.host, port=config.serve.port
+    )

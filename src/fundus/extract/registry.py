@@ -13,7 +13,10 @@ from fundus.extract.tika import TikaExtractor
 
 _BUILDERS: dict[str, Callable[[EngineConfig], Extractor]] = {
     "docling-serve": lambda c: DoclingServeExtractor(
-        c.url, version=c.version, max_concurrency=c.max_concurrency, timeout=c.timeout,
+        c.url,
+        version=c.version,
+        max_concurrency=c.max_concurrency,
+        timeout=c.timeout,
         ocr_engine=c.ocr_engine,
     ),
     "tika": lambda c: TikaExtractor(c.url, version=c.version, timeout=c.timeout),

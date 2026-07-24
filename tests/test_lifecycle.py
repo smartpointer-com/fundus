@@ -236,7 +236,11 @@ def _pipeline(lifecycles):
     from fundus.core.pipeline import Pipeline
 
     return Pipeline(
-        FundusConfig(), NullSink(), FakeExtractor(), DictCache(), DictState(),
+        FundusConfig(),
+        NullSink(),
+        FakeExtractor(),
+        DictCache(),
+        DictState(),
         lifecycles=lifecycles,
     )
 
